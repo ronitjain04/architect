@@ -210,7 +210,7 @@ struct ProjectsView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.black.opacity(0.8))
                             
-                            NavigationLink(destination: ARSessionView()) {
+                            NavigationLink(destination: ARViewControllerWrapper().navigationBarBackButtonHidden(true)) {
                                 Text("Open Project")
                                     .foregroundColor(Color(red: 99/255, green: 83/255, blue: 70/255))
                                     .fontWeight(.bold)
@@ -220,8 +220,12 @@ struct ProjectsView: View {
                                     .cornerRadius(12)
                             }
                             .padding(.top, 8)
-                            
-                            NavigationLink(destination: ARSessionView()) {
+
+                            Button {
+                                withAnimation {
+                                    self.selectedProject = nil
+                                }
+                            } label: {
                                 Text("Delete")
                                     .foregroundColor(.white)
                                     .fontWeight(.bold)

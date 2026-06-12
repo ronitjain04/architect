@@ -6,6 +6,7 @@
 
 import SwiftUI
 import FirebaseAuth
+import GoogleSignIn
 
 
 
@@ -90,7 +91,9 @@ struct LoginView: View {
 				GoogleSignInButtonView()
 					.frame(width: 350, height: 50)
 					.onTapGesture {
-						googleSignIn()
+						GoogleAuthService.signIn {
+							isAuthenticated = true
+						}
 					}
 				Spacer()
 			}
