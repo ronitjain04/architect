@@ -1,13 +1,22 @@
+//
+//  ARSessionFunctions.swift
+//  ARchitect
+//
+//  Created by Jiyoon Lee on 4/10/25.
+//
+
 import UIKit
 import ARKit
 import RealityKit
 
-class Furniture3DView: UIViewController {
-    var modelName: String = ""
-    var furnitureWrappers: [FurnitureWrapper] = []
+class ARViewController: UIViewController {
     var toggleMovementButton: UIButton!
     var arView: ARView!
     var selectedFurniture: ModelEntity?
+    var projectName: String = ""
+    var projectDescription: String = ""
+    var usedFurnitureModels: [String] = [] // Track furniture models used in the AR session
+    var furnitureWrappers: [FurnitureWrapper] = [] // Track furniture models with gestures
     
 
     override func viewDidLoad() {
@@ -46,15 +55,31 @@ class Furniture3DView: UIViewController {
         backArrowButton.tintColor = .systemGray
         backArrowButton.addTarget(self, action: #selector(goBackToEntryView), for: .touchUpInside)
         self.view.addSubview(backArrowButton)
+
+        let furnitureGalleryButton = UIButton(type: .system)
+        furnitureGalleryButton.frame = CGRect(x: 20, y: 400, width: 44, height: 44)
+        furnitureGalleryButton.setImage(UIImage(systemName: "chair.fill"), for: .normal)
+        furnitureGalleryButton.tintColor = .white
+        furnitureGalleryButton.backgroundColor = .systemGray
+        furnitureGalleryButton.layer.cornerRadius = 22
+        furnitureGalleryButton.addTarget(self, action: #selector(openFurnitureGallery), for: .touchUpInside)
+        self.view.addSubview(furnitureGalleryButton)
+
+        let saveButton = UIButton(frame: CGRect(x: 300, y: 700, width: 50, height: 30))
+        saveButton.setTitle("Save", for: .normal)
+        saveButton.backgroundColor = .systemGray
+        saveButton.layer.cornerRadius = 8
+        saveButton.addTarget(self, action: #selector(takeScreenshot), for: .touchUpInside)
+        self.view.addSubview(saveButton)
         
         toggleMovementButton = UIButton(type: .system)
-        toggleMovementButton.frame = CGRect(x: 20, y: 150, width: 44, height: 44)
+        toggleMovementButton.frame = CGRect(x: 20, y: 450, width: 44, height: 44)
         toggleMovementButton.tintColor = .white
-        toggleMovementButton.backgroundColor = UIColor.systemOrange
+        toggleMovementButton.backgroundColor = .systemGray
         toggleMovementButton.layer.cornerRadius = 22
         toggleMovementButton.addTarget(self, action: #selector(toggleMovementMode), for: .touchUpInside)
         self.view.addSubview(toggleMovementButton)
-        updateToggleButtonIcon() // Set the initial icon
+        updateToggleButtonIcon()
 
 
     }
@@ -63,6 +88,63 @@ class Furniture3DView: UIViewController {
         self.dismiss(animated: true, completion: nil)
     }
 
+    @objc func openFurnitureGallery() {
+        let furnitureGalleryVC = FurnitureGalleryViewController()
+        furnitureGalleryVC.delegate = self
+        furnitureGalleryVC.modalPresentationStyle = .pageSheet
+        if let sheet = furnitureGalleryVC.sheetPresentationController {
+            sheet.detents = [.medium()]
+        }
+        self.present(furnitureGalleryVC, animated: true, completion: nil)
+    }
+
+    @objc func takeScreenshot() {
+        arView.snapshot(saveToHDR: false) { image in
+            guard let screenshot = image else {
+                print("Error: Failed to capture screenshot.")
+                return
+            }
+
+            let screenshotVC = ScreenshotViewController()
+            screenshotVC.screenshotImage = screenshot
+            screenshotVC.usedFurnitureModels = self.usedFurnitureModels // Pass the furniture models used
+            screenshotVC.modalPresentationStyle = .fullScreen
+            self.present(screenshotVC, animated: true, completion: nil)
+        }
+    }
+
+    func createInfoBox(for modelEntity: ModelEntity, modelName: String) -> Entity {
+        let textMesh = MeshResource.generateText(
+            "Furniture Info\nName: \(modelName)\nSize: \(modelEntity.scale)",
+            extrusionDepth: 0.01,
+            font: .systemFont(ofSize: 0.03),
+            containerFrame: .zero,
+            alignment: .center,
+            lineBreakMode: .byWordWrapping
+        )
+        let textMaterial = SimpleMaterial(color: .black, isMetallic: false)
+        let textEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
+        textEntity.scale = SIMD3<Float>(0.5, 0.5, 0.5)
+
+        let textBounds = textMesh.bounds
+        let textWidth = textBounds.max.x - textBounds.min.x
+        let textHeight = textBounds.max.y - textBounds.min.y
+
+        let boxMesh = MeshResource.generateBox(size: [textWidth * 0.6, textHeight * 0.6, 0.01])
+        let boxMaterial = SimpleMaterial(color: .white, isMetallic: false)
+        let boxEntity = ModelEntity(mesh: boxMesh, materials: [boxMaterial])
+        boxEntity.position = [0, 0, -0.005]
+
+        let textOffsetX = -textBounds.center.x * 0.5
+        let textOffsetY = -textBounds.center.y * 0.5
+        textEntity.position = [textOffsetX, textOffsetY, 0.005]
+
+        let infoBoxEntity = Entity()
+        infoBoxEntity.addChild(boxEntity)
+        infoBoxEntity.addChild(textEntity)
+
+        return infoBoxEntity
+    }
 
     func placeFurnitureInScene(modelEntity: ModelEntity, modelName: String) {
         guard let currentFrame = arView.session.currentFrame else {
@@ -99,6 +181,11 @@ class Furniture3DView: UIViewController {
 
             furnitureWrappers.append(furnitureWrapper)
             updateToggleButtonIcon()
+            
+            // Add an info box to the furniture
+            let infoBox = createInfoBox(for: modelEntity, modelName: modelName)
+            infoBox.position = SIMD3<Float>(0, 0.2, 0) // Position the info box above the model
+            modelEntity.addChild(infoBox)
 
             print("Furniture placed in the scene at position: \(worldPosition).")
         } else {
@@ -170,25 +257,11 @@ class Furniture3DView: UIViewController {
 
         if wrapper.movementMode == .vertical {
             // Freeform vertical dragging
-            let deltaY = Float(translation.y) * -0.004
+            let deltaY = Float(translation.y) * -0.007
             position.y += deltaY
         } else {
-            // Try raycast first
-            let results = arView.raycast(from: location, allowing: .existingPlaneGeometry, alignment: .horizontal)
-
-//            if let result = results.first {
-//                position.x = result.worldTransform.columns.3.x
-//                position.z = result.worldTransform.columns.3.z
-//            } else {
-//                // Fallback: freeform dragging
-//                let deltaX = Float(translation.x) * 0.004
-//                let deltaZ = Float(translation.y) * 0.004
-//                position.x += deltaX
-//                position.z += deltaZ
-//            }
-            // Fallback: freeform dragging
-            let deltaX = Float(translation.x) * 0.004
-            let deltaZ = Float(translation.y) * 0.004
+            let deltaX = Float(translation.x) * 0.007
+            let deltaZ = Float(translation.y) * 0.007
             position.x += deltaX
             position.z += deltaZ
         }
@@ -212,33 +285,12 @@ class Furniture3DView: UIViewController {
     func updateToggleButtonIcon() {
         if let selectedWrapper = furnitureWrappers.first(where: { $0.isSelected }) {
             let imageName = selectedWrapper.movementMode == .horizontal
-                ? "arrow.up.and.down.circle.fill"  // clicking will switch to vertical
-                : "arrow.left.and.right.circle.fill" // clicking will switch to horizontal
+                ? "arrow.up.and.down.circle.fill"
+                : "arrow.left.and.right.circle.fill"
+            
             toggleMovementButton.setImage(UIImage(systemName: imageName), for: .normal)
         } else {
             toggleMovementButton.setImage(nil, for: .normal)
-        }
-    }
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        // Delaying to let ARKit detect the scene
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            self.loadAndPlaceFurniture()
-        }
-    }
-
-    func loadAndPlaceFurniture() {
-        guard let modelURL = Bundle.main.url(forResource: modelName, withExtension: "usdz") else {
-            print("Error: Model \(modelName) not found.")
-            return
-        }
-
-        do {
-            let modelEntity = try ModelEntity.loadModel(contentsOf: modelURL)
-            modelEntity.generateCollisionShapes(recursive: true)
-            placeFurnitureInScene(modelEntity: modelEntity, modelName: modelName)
-        } catch {
-            print("Error loading model \(modelName): \(error)")
         }
     }
 
@@ -247,3 +299,24 @@ class Furniture3DView: UIViewController {
 
 }
 
+extension ARViewController: FurnitureGalleryDelegate {
+    func furnitureSelected(named modelName: String) {
+        guard let modelURL = Bundle.main.url(forResource: modelName, withExtension: "usdz") else {
+            print("Error: Model \(modelName) not found in the local directory.")
+            return
+        }
+
+        do {
+            let modelEntity = try ModelEntity.loadModel(contentsOf: modelURL)
+            modelEntity.generateCollisionShapes(recursive: true)
+            placeFurnitureInScene(modelEntity: modelEntity, modelName: modelName) // Pass modelName to display in the info box
+
+            // Record the furniture model used
+            if !usedFurnitureModels.contains(modelName) {
+                usedFurnitureModels.append(modelName)
+            }
+        } catch {
+            print("Error: Failed to load model \(modelName) with error: \(error).")
+        }
+    }
+}
