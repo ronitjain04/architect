@@ -154,27 +154,6 @@ struct ProjectsView: View {
                         }
                         .padding([.horizontal, .bottom])
                         .padding(.top, 4)
-//                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-//                            ForEach(filteredProjects(), id: \.id) { project in
-//                                if project.isLocked {
-//                                    ProjectCard(project: project)
-//                                        .frame(width: 173, height: 188)
-//                                        .onTapGesture {
-//                                            withAnimation {
-//                                                selectedProject = project
-//                                            }
-//                                        }
-//                                } else {
-//                                    NavigationLink(destination: EditProjectView(project: project).navigationBarBackButtonHidden(true)) {
-//                                        ProjectCard(project: project)
-//                                            .frame(width: 173, height: 188)
-//                                    }
-//                                    .buttonStyle(PlainButtonStyle())
-//                                }
-//                            }
-//                        }
-//                        .padding([.horizontal, .bottom])
-//                        .padding(.top, 4)
                     }
                 }
                 
@@ -288,16 +267,7 @@ struct ProjectsView: View {
     }
 }
 
-// MARK: - Model and Card for Projects
-struct Project: Identifiable {
-    let id = UUID()
-    var name: String
-    var tags: [String]
-    var isLocked: Bool = false
-    var image: String
-    var modified: String
-}
-
+// MARK: - Card for Projects
 struct ProjectCard: View {
     var project: Project
     
