@@ -1,12 +1,6 @@
 import SwiftUI
 
-enum RecentMode {
-    case box
-    case sofa
-}
-
 struct GeneralView: View {
-    @State private var recentMode: RecentMode = .box
     @State private var selectedTab: String = "Projects"
     @State private var searchText: String = ""
     
@@ -22,7 +16,7 @@ struct GeneralView: View {
             // this view is pure content.
             ZStack {
                 if selectedTab == "Projects" {
-                    ProjectsView(recentMode: $recentMode)
+                    ProjectsView()
                         .transition(.opacity)
                 } else {
                     FurnitureLibraryWrapperView(searchText: $searchText)
@@ -32,6 +26,9 @@ struct GeneralView: View {
             .animation(.easeInOut(duration: 0.25), value: selectedTab)
         }
         .background(Color(hex: "#FFF2DF").edgesIgnoringSafeArea(.all))
+        // This view supplies its own header, so hide the native nav bar to
+        // avoid a duplicate empty bar above it.
+        .toolbar(.hidden, for: .navigationBar)
     }
     
     var navigationHeader: some View {

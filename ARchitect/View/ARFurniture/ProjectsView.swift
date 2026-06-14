@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct ProjectsView: View {
-    @Binding var recentMode: RecentMode  // Shared state from GeneralView
-    
     @State private var selectedFilter: String = "All Projects"
     @State private var isSearchActive: Bool = false
     @State private var searchQuery: String = ""
@@ -49,42 +47,13 @@ struct ProjectsView: View {
                     
                     // Recent Section & Filters
                     ScrollView {
-                        // "Recent" navigation buttons row
+                        // "Recent" section label
                         HStack {
                             Text("Recent")
                                 .font(.title3)
                                 .fontWeight(.medium)
                                 .foregroundColor(Color(red: 99/255, green: 83/255, blue: 70/255))
                             Spacer()
-                            HStack {
-                                Button {
-                                    withAnimation {
-                                        recentMode = .box
-                                    }
-                                } label: {
-                                    Image(systemName: "square.split.bottomrightquarter.fill")
-                                        .font(.title2)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(Color(red: 99/255, green: 83/255, blue: 70/255))
-                                }
-                                Button {
-                                    withAnimation {
-                                        recentMode = .sofa
-                                    }
-                                } label: {
-                                    Image(systemName: "sofa")
-                                        .font(.title2)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(Color(red: 99/255, green: 83/255, blue: 70/255))
-                                }
-                            }
-                            .padding(.vertical, 7.5)
-                            .padding(.horizontal, 15)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .fill(Color(red: 236/255, green: 216/255, blue: 189/255))
-                            )
-                            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
                         }
                         .padding(.horizontal)
                         
