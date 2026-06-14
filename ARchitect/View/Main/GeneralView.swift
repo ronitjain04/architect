@@ -14,39 +14,24 @@ struct GeneralView: View {
     let filters = ["All Projects", "Favorites", "A-Z", "Private", "Public"]
     
     var body: some View {
-        NavigationStack {
-            VStack (spacing: 0) {
-                navigationHeader
-                
-                ZStack {
-                    if selectedTab == "Projects" {
-                        ProjectsView(recentMode: $recentMode)
-                    } else {
-                        FurnitureLibraryWrapperView(searchText: $searchText)
-                    }
-                    
-    //                if !isKeyboardVisible {
-    //                    BottomNavigationBar()
-    //                }
-                    
-                    VStack{
-                        Spacer()
-                        BottomNavigationBar()
-                    }
+        VStack(spacing: 0) {
+            navigationHeader
+
+            // Projects / Furniture sub-tabs crossfade smoothly. The root
+            // NavigationStack and the bottom bar now live in RootTabView, so
+            // this view is pure content.
+            ZStack {
+                if selectedTab == "Projects" {
+                    ProjectsView(recentMode: $recentMode)
+                        .transition(.opacity)
+                } else {
+                    FurnitureLibraryWrapperView(searchText: $searchText)
+                        .transition(.opacity)
                 }
-                   
             }
-//            .toolbar {
-//                NavigationLink {
-//                    ARSessionView()
-//                } label: {
-//                    Text("Start AR")
-//                }
-//                
-//            }
+            .animation(.easeInOut(duration: 0.25), value: selectedTab)
         }
         .background(Color(hex: "#FFF2DF").edgesIgnoringSafeArea(.all))
-        
     }
     
     var navigationHeader: some View {
