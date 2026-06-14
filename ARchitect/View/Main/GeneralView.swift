@@ -1,12 +1,6 @@
 import SwiftUI
 
-enum RecentMode {
-    case box
-    case sofa
-}
-
 struct GeneralView: View {
-    @State private var recentMode: RecentMode = .box
     @State private var selectedTab: String = "Projects"
     @State private var searchText: String = ""
     
@@ -22,7 +16,7 @@ struct GeneralView: View {
             // this view is pure content.
             ZStack {
                 if selectedTab == "Projects" {
-                    ProjectsView(recentMode: $recentMode)
+                    ProjectsView()
                         .transition(.opacity)
                 } else {
                     FurnitureLibraryWrapperView(searchText: $searchText)
