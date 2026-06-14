@@ -32,6 +32,9 @@ struct GeneralView: View {
             .animation(.easeInOut(duration: 0.25), value: selectedTab)
         }
         .background(Color(hex: "#FFF2DF").edgesIgnoringSafeArea(.all))
+        // This view supplies its own header, so hide the native nav bar to
+        // avoid a duplicate empty bar above it.
+        .toolbar(.hidden, for: .navigationBar)
     }
     
     var navigationHeader: some View {

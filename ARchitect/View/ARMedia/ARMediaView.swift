@@ -113,8 +113,11 @@ struct ARMediaView: View {
                 }
             }
         }
+        // This view supplies its own header, so hide the native nav bar to
+        // avoid a duplicate empty bar above it.
+        .toolbar(.hidden, for: .navigationBar)
     }
-    
+
 //    private func bindingForPost(id: UUID) -> Binding<Post>? {
 //        guard let index = posts.firstIndex(where: { $0.id == id}) else { return nil}
 //        return $posts[index]

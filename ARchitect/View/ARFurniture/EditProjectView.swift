@@ -173,6 +173,8 @@ struct EditProjectView: View {
             }
             .padding(.top, 16)
         }
+        // Custom header + back button above, so hide the native nav bar.
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
