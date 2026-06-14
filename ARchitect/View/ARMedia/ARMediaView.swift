@@ -49,7 +49,9 @@ struct ARMediaView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        // No NavigationStack / BottomNavigationBar here — both are owned by
+        // RootTabView so tab switching no longer pushes onto the stack.
+        Group {
             ZStack (alignment: .bottom){
                 Color(.sRGB,red: 249/255, green: 237/255, blue: 215/255)
                     .ignoresSafeArea()
@@ -109,8 +111,6 @@ struct ARMediaView: View {
                         .padding(.bottom, 20)
                     }
                 }
-                
-                BottomNavigationBar()
             }
         }
     }

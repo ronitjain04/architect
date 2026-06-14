@@ -23,8 +23,7 @@ struct MainView: View {
     }
     
     var tabController: some View {
-        GeneralView()
-//        BottomNavigationBar()
+        RootTabView()
     }
 }
 

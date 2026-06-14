@@ -49,7 +49,8 @@ struct FurnitureLibraryView: View {
     let recentItems = FurnitureData.allItems
     
     var body: some View {
-        NavigationStack {
+        // No NavigationStack here — the root stack is owned by RootTabView.
+        Group {
             ZStack {
                 Color(hex: "#FFF2DF").ignoresSafeArea()
                 GeometryReader { geo in
