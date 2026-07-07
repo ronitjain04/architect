@@ -82,7 +82,8 @@ private struct CommentSheetContent: View {
                 .disabled(newCommentText.isEmpty)
             }
             .padding(.horizontal, AppSpacing.md)
-            .padding(.vertical, AppSpacing.sm + 2)
+            .padding(.top, AppSpacing.sm + 2)
+            .padding(.bottom, 28)
         }
     }
 
