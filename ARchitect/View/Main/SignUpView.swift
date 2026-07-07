@@ -2,83 +2,80 @@
 //  SignUpView.swift
 //  ARchitect
 //
-//  Created by Preyas Joshi on 2/20/25.
+//  Instagram-style sign up: wordmark, soft fields, a primary action, and a
+//  "log in" link at the bottom.
 //
 
 import SwiftUI
 
 struct SignUpView: View {
-	@State private var username: String = ""
-	@State private var password: String = ""
-	@State private var email: String = ""
+    @Environment(\.dismiss) private var dismiss
+    @State private var username: String = ""
+    @State private var email: String = ""
+    @State private var password: String = ""
     @Binding var isAuthenticated: Bool
-    
-	var body: some View {
-		VStack(alignment: .leading) {
-			Spacer().frame(height: 50)
-			HStack {
-				Text("Create a New Account").font(.system(size:30, weight: .bold, design: .monospaced))
-					.padding(.leading)
-				Spacer().frame(width: 30)
-			}
-			Spacer().frame(height: 50)
-			VStack(alignment: .leading) {
-				Text("Username")
-					.font(.system(size:20, design: .monospaced))
-					.foregroundColor(.black)
-				
-				TextField("", text: $username)
-					.textFieldStyle(.plain)
-					.padding(.vertical, 2)
-					.overlay(Rectangle().frame(height: 1).foregroundColor(.gray), alignment: .bottom)
-			}
-			.padding()
-			VStack(alignment: .leading) {
-				Text("Email")
-					.font(.system(size:20, design: .monospaced))
-					.foregroundColor(.black)
-				
-				TextField("", text: $email)
-					.textFieldStyle(.plain)
-					.padding(.vertical, 2)
-					.overlay(Rectangle().frame(height: 1).foregroundColor(.gray), alignment: .bottom)
-			}
-			.padding()
-			VStack(alignment: .leading) {
-				Text("Password")
-					.font(.system(size:20, design: .monospaced))
-					.foregroundColor(.black)
-				
-				TextField("", text: $password)
-					.textFieldStyle(.plain)
-					.padding(.vertical, 2)
-					.overlay(Rectangle().frame(height: 1).foregroundColor(.gray), alignment: .bottom)
-			}
-			.padding()
-			Spacer()
-			HStack {
-				Spacer()
-				Button(action: {
+
+    var body: some View {
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.appText)
+                    }
+                    Spacer()
+                }
+
+                Spacer()
+
+                VStack(spacing: AppSpacing.xs) {
+                    Text("ARchitect")
+                        .font(AppFont.fraunces(36, .semibold))
+                        .foregroundColor(.appText)
+                    Text("Sign up to design and share your spaces")
+                        .font(AppFont.inter(13, .regular))
+                        .foregroundColor(.appTextSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.bottom, AppSpacing.xl)
+
+                VStack(spacing: AppSpacing.sm) {
+                    AuthField(placeholder: "Username", text: $username)
+                    AuthField(placeholder: "Email", text: $email)
+                    AuthField(placeholder: "Password", text: $password, isSecure: true)
+                }
+
+                Button("Sign up") {
                     isAuthenticated = true
-					print("Welcome \(username), your password is \(password), your email is \(email)")
-				}) {
-					Text("Sign Up")
-						.font(.system(size:20, design: .monospaced))
-						.foregroundColor(.black)
-						.padding()
-						.frame(width: 346, height: 46)
-						.background(Color.white) // Button background color
-						.cornerRadius(15)
-						.overlay(
-							RoundedRectangle(cornerRadius: 15).stroke(Color.black, lineWidth: 2) // Black outline
-						)
-				}
-				Spacer()
-			}
-			Spacer().frame(height: 250)
-		}
-		.frame(maxHeight: .infinity, alignment: .leading)
-	}
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.top, AppSpacing.md)
+
+                Text("By signing up, you agree to our Terms and Privacy Policy.")
+                    .font(AppFont.inter(11, .regular))
+                    .foregroundColor(.appTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, AppSpacing.md)
+
+                Spacer()
+
+                Divider().background(Color.appDivider)
+
+                Button { dismiss() } label: {
+                    (Text("Have an account? ").foregroundColor(.appTextSecondary)
+                     + Text("Log in").foregroundColor(.appAccent))
+                        .font(AppFont.inter(13, .medium))
+                }
+                .padding(.top, AppSpacing.md)
+                .padding(.bottom, AppSpacing.sm)
+            }
+            .padding(.horizontal, AppSpacing.xl)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
 }
 
 #Preview {

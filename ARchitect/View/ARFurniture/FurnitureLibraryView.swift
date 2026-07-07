@@ -1,224 +1,141 @@
 import SwiftUI
 
-struct FurnitureLibraryWrapperView: View {
-    @State private var refreshID = UUID()
-    @Binding var searchText: String
+/// The Explore tab — an Instagram-style discovery screen for the furniture
+/// catalog: a search field, category filter pills, and a tight grid of items
+/// that open the AR try-out experience.
+struct FurnitureExploreView: View {
+    @State private var searchText: String = ""
+    @State private var selectedCategory: String = "Chairs"
 
-    var body: some View {
-        ZStack {
-            
-            Color(hex: "#FFF2DF").ignoresSafeArea()
-                
-            FurnitureLibraryView(searchText: $searchText)
-                .id(refreshID) // 🔁 Triggers reinitialization
-//            Button {
-//                refreshID = UUID() // Changing this causes the view to reset
-//                print("reset furniture library")
-//            } label: {
-//                Image(systemName: "arrow.clockwise")
-//            }
-//            .padding()
-        }
-    }
-}
-
-struct FurnitureLibraryView: View {
-    @Binding var searchText: String //search string
-    
-    @State private var selectedCategory = "Furniture"
-    @State private var selectedFilter = "Chairs"
-    
-    @State private var selectedItem: FurnitureItem?
-    @State private var isDetailedView = false;
-    
-    @State private var showARPreview = false
-    
-    @State private var showHeader = true
-    @State private var lastScrollOffset: CGFloat = 0
-
-    
-    let categories = ["Projects", "Furniture"]
-    let filters = [
+    private let categories: [(String, String)] = [
+        ("Chairs", "chair.fill"),
         ("Sofas", "sofa.fill"),
         ("Lights", "lamp.floor.fill"),
         ("Desks", "table.furniture.fill"),
-        ("Chairs", "chair.fill"),
         ("Drawers", "archivebox.fill"),
     ]
-    
-    let recentItems = FurnitureData.allItems
-    
-    var body: some View {
-        // No NavigationStack here — the root stack is owned by RootTabView.
-        Group {
-            ZStack {
-                Color(hex: "#FFF2DF").ignoresSafeArea()
-                GeometryReader { geo in
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            Color.clear
-                                .frame(height: 0)
-                                .background(
-                                    GeometryReader { scrollGeo in
-                                        Color.clear
-                                            .preference(key: ScrollOffsetPreferenceKey.self, value: scrollGeo.frame(in: .global).minY)
-                                    }
-                                )
-                            
-                            if showHeader {
-                                VStack(spacing: 0) {
-                                    // 🟤 "Recent"
-                                    Text("Recent")
-                                        .font(.headline)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.horizontal)
-                                        .padding(.bottom, 1)
-                                    
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 30) {
-                                            ForEach(recentItems.prefix(3)) { item in
-                                                Button {
-                                                    showARPreview = true
-                                                } label: {
-                                                    FurnitureCard(item: item)
-                                                }
-                                            }
-                                        }
-                                        .padding(.horizontal)
-                                    }
-                                    
-                                    // 🟤 Filters
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack {
-                                            ForEach(filters, id: \.0) { filter in
-                                                Button(action: { selectedFilter = filter.0 }) {
-                                                    VStack {
-                                                        Image(systemName: filter.1)
-                                                            .font(.title2)
-                                                            .foregroundColor(selectedFilter == filter.0 ? .white : Color(hex: "#3E2A47"))
-                                                            .padding()
-                                                            .background(selectedFilter == filter.0 ? Color.brown : Color.gray.opacity(0.2))
-                                                            .clipShape(Circle())
-                                                        
-                                                        Text(filter.0)
-                                                            .font(.caption)
-                                                            .foregroundColor(selectedFilter == filter.0 ? .black : .gray)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        .padding(.horizontal)
-                                    }
-                                    .padding()
-                                }
-                                .transition(.move(edge: .top).combined(with: .opacity))
-                            }
-                            
-                            // 🟤 Main Grid
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())]) {
-                                ForEach(recentItems.filter { $0.category == selectedFilter }) { item in
-                                    Button {
-                                        showARPreview = true
-                                    } label: {
-                                        FurnitureCard(item: item)
-                                    }
-                                }
-                            }
-                            .padding()
-                        }
-                    }
-                    .fullScreenCover(isPresented: $showARPreview, content: {
-                        FurnitureTryOutView()
-                    })
-                    .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-                        let delta = offset - lastScrollOffset
-                        if abs(delta) > 5 {
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                showHeader = delta > 0 || offset > -50 // reveal on scroll up or near top
-                            }
-                        }
-                        lastScrollOffset = offset
-                    }
-                }
-            }
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2)
+    ]
+
+    private var items: [FurnitureItem] {
+        FurnitureData.allItems.filter { item in
+            (selectedCategory.isEmpty || item.category == selectedCategory) &&
+            (searchText.isEmpty ||
+             item.name.localizedCaseInsensitiveContains(searchText) ||
+             item.tags.contains { $0.localizedCaseInsensitiveContains(searchText) })
         }
-
     }
-       
-}
 
-struct FurnitureCard: View {
-    let item: FurnitureItem
-    
     var body: some View {
         ZStack {
-            Image(item.imageName)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 173, height: 188)
-                .clipped()
+            Color.appBackground.ignoresSafeArea()
 
-            LinearGradient(
-                gradient: Gradient(colors: [Color.black.opacity(0.6), Color.clear]),
-                startPoint: .bottom,
-                endPoint: .center
-            )
-            .cornerRadius(12)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    ForEach(item.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: 8))
-                            .fontWeight(.bold)
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 8)
-                            .background(Color(red: 206/255, green: 135/255, blue: 35/255))
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                            .lineLimit(1)
+            VStack(spacing: 0) {
+                // Search field
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.appTextSecondary)
+                    TextField("Search furniture", text: $searchText)
+                        .font(AppFont.body)
+                        .foregroundColor(.appText)
+                    if !searchText.isEmpty {
+                        Button { searchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.appTextSecondary)
+                        }
                     }
                 }
+                .padding(.horizontal, AppSpacing.md)
+                .frame(height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                        .fill(Color.appSurfaceAlt)
+                )
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.vertical, AppSpacing.sm)
 
-                Text(item.name)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .lineLimit(1)
+                // Category pills
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: AppSpacing.sm) {
+                        ForEach(categories, id: \.0) { category in
+                            let isSelected = selectedCategory == category.0
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) { selectedCategory = category.0 }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: category.1).font(.system(size: 13))
+                                    Text(category.0).font(AppFont.inter(13, .semibold))
+                                }
+                                .foregroundColor(isSelected ? .appOnPrimary : .appPrimary)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 14)
+                                .background(
+                                    Capsule().fill(isSelected ? Color.appPrimary : Color.appSurfaceAlt)
+                                )
+                            }
+                        }
+                    }
+                    .padding(.horizontal, AppSpacing.md)
+                }
+                .padding(.bottom, AppSpacing.sm)
+
+                Divider().background(Color.appDivider)
+
+                // Discovery grid — cells open the product page.
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 2) {
+                        ForEach(items) { item in
+                            NavigationLink(destination: FurnitureDetailView(item: item)) {
+                                ExploreCell(item: item)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.top, 2)
+                    .padding(.bottom, 90)
+                }
+                .scrollDismissesKeyboard(.immediately)
             }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         }
-        .frame(width: 173, height: 188)
-        .background(Color(hex: "#FFF2DF")) // optional if you want card color
-        .cornerRadius(12)
-        .clipped()
-        .shadow(radius: 3)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
-struct BottomNavItem: View {
-    let icon: String
-    
+/// Square discovery thumbnail with a gold tag chip.
+struct ExploreCell: View {
+    let item: FurnitureItem
+
     var body: some View {
-        Image(systemName: icon)
-            .font(.title2)
-            .foregroundColor(.black)
-            .padding()
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay(
+                Image(item.imageName)
+                    .resizable()
+                    .scaledToFill()
+            )
+            .overlay(alignment: .bottomLeading) {
+                if let tag = item.tags.first {
+                    Text(tag)
+                        .font(AppFont.inter(9, .semibold))
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 7)
+                        .background(Color.appAccent)
+                        .foregroundColor(.white)
+                        .cornerRadius(AppRadius.sm)
+                        .padding(6)
+                }
+            }
+            .background(Color.appSurface)
+            .clipped()
     }
 }
 
-struct HomeView_Previews: PreviewProvider {
-    @State static var placeHolderSearchText = ""
-
+struct FurnitureExploreView_Previews: PreviewProvider {
     static var previews: some View {
-        FurnitureLibraryView(searchText: $placeHolderSearchText)
-    }
-}
-
-struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+        FurnitureExploreView()
     }
 }

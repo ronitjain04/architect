@@ -22,27 +22,34 @@ struct FurnitureTryOutView: View {
     
     var body: some View {
         ZStack {
-            Color(hex: "#FFF2DF").ignoresSafeArea()
-            
+            Color.appBackground.ignoresSafeArea()
+
             VStack {
-                HStack {
-                    Button(action: {
-                        dismiss() // ✅ This properly stops the view and session
-                    }) {
-                        Image(systemName: "chevron.backward")
-                            .padding()
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Circle())
-                            .foregroundColor(.white)
-                    }
-                    .padding(.leading)
-                    Spacer()
-                }
-                HStack {
+                ZStack {
+                    Text("Curved Comfort Chair")
+                        .font(AppFont.fraunces(18, .semibold))
+                        .foregroundColor(.appText)
+
                     HStack {
-                        Text("Made by ").padding(.leading)
-                        Text("@danielgindi❤️").bold()
+                        Button(action: {
+                            dismiss() // ✅ This properly stops the view and session
+                        }) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(Circle().fill(Color.black.opacity(0.55)))
+                        }
+                        Spacer()
                     }
+                    .padding(.horizontal, AppSpacing.md)
+                }
+
+                HStack {
+                    Text("Model by @danielgindi")
+                        .font(AppFont.inter(12, .regular))
+                        .foregroundColor(.appTextSecondary)
+                        .padding(.leading, AppSpacing.md)
                     Spacer()
                 }
                 RealityView { content in
@@ -155,9 +162,9 @@ struct FurnitureTryOutView: View {
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 80)
                         Text(useWorldTracking ? "Stop" : "View in your room")
-                            .font(.headline)
+                            .font(AppFont.inter(15, .semibold))
                     }
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Color.appText)
                 }
             }
             .padding(.vertical)

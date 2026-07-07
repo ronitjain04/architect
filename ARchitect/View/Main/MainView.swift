@@ -14,14 +14,20 @@ struct MainView: View {
     
     var body: some View {
         tabController
+            // App-wide Inter default typography + tint.
+            .font(AppFont.body)
+            .tint(.appPrimary)
             .sheet(isPresented: Binding(get: {
                 !isAuthenticated
             }, set: { _ in })) {
                 AuthenticationView(isAuthenticated: $isAuthenticated)
                     .interactiveDismissDisabled(true)
+                    // Sheets get a fresh environment, so apply here too.
+                    .font(AppFont.body)
+                    .tint(.appPrimary)
             }
     }
-    
+
     var tabController: some View {
         RootTabView()
     }

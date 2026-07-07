@@ -1,103 +1,128 @@
 import SwiftUI
 
+/// Instagram-style comments sheet: a titled header, comment rows with
+/// avatars, and an input bar pinned to the bottom.
 struct CommentSectionView: View {
     @Binding var viewModel: CommentViewModel
-    @State private var newCommentText = ""
-    
+
     var body: some View {
-        ZStack{
-            Color(.sRGB,red: 249/255, green: 237/255, blue: 215/255)
-                .edgesIgnoringSafeArea(.all)
-            VStack{
-                Spacer().frame(height: 5)
-                
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.black.opacity(0.5))
-                    .frame(width: 40, height: 5)
-                    .padding(.top, 5)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Spacer().frame(height: 5)
-                    
-                    HStack {
-                        Spacer()
-                        Text("Comments")
-                            .font(.title2)
-                            .foregroundColor(.black)
-                        
-                        Spacer()
-                    }
-                    
-                    // List of comments
-                    ScrollView(.vertical, showsIndicators: false) {
-                        ForEach(viewModel.comments) { comment in
-                            HStack(alignment: .top) {
-                                
-                                Image(systemName: comment.userImage)
-                                    .resizable()
-                                    .frame(width: 40, height: 40)
-                                    .clipShape(Circle())
-                                
-                                Spacer().frame(width: 10)
-                                // Comment text
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(comment.publisher)
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                    
-                                    Text(comment.text)
-                                        .font(.body)
-                                }
-                            
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding()
-                            .cornerRadius(8)
-                            .padding(.horizontal)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .cornerRadius(12)
-                    
-                    // Text input for adding new comments
-                    HStack (spacing: 20) {
-                        TextField("Add a comment...", text: $newCommentText)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .frame(height: 50) // Increased height from 40 to 50
-                            .background(Color(.sRGB,red: 229/255, green: 207/255, blue: 185/255)) // Light gray background
-                            .cornerRadius(25) // Increased radius for a more rounded look
-                            .foregroundColor(.black)
-                        
-                        Button(action: {
-                            if !newCommentText.isEmpty {
-                                viewModel.addComment(text: newCommentText, publisher: "User123")
-                                newCommentText = ""
-                            }
-                        }) {
-                            Image(systemName: "paperplane.fill")
-                                .resizable()
-                                .foregroundColor(.gray)
-                                .aspectRatio(contentMode: .fit)
-                                .frame(height: 40)
-                        }
-                    }
-                    .padding()
+        // The class is handed down as a binding from Post; observe it in an
+        // inner view so newly posted comments actually refresh the list.
+        CommentSheetContent(model: viewModel)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Color.appBackground)
+    }
+}
+
+private struct CommentSheetContent: View {
+    @ObservedObject var model: CommentViewModel
+    @State private var newCommentText = ""
+    @FocusState private var inputFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("Comments")
+                .font(AppFont.inter(15, .semibold))
+                .foregroundColor(.appText)
+                .padding(.top, AppSpacing.md)
+                .padding(.bottom, AppSpacing.sm + 4)
+
+            Divider().background(Color.appDivider)
+
+            if model.comments.isEmpty {
+                VStack(spacing: AppSpacing.sm) {
+                    Text("No comments yet")
+                        .font(AppFont.inter(17, .semibold))
+                        .foregroundColor(.appText)
+                    Text("Start the conversation.")
+                        .font(AppFont.inter(13, .regular))
+                        .foregroundColor(.appTextSecondary)
                 }
-                .padding(.top)
-                .presentationDetents([.medium, .large])
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: AppSpacing.md + 4) {
+                        ForEach(model.comments) { comment in
+                            CommentRow(comment: comment)
+                        }
+                    }
+                    .padding(AppSpacing.md)
+                }
+                .scrollDismissesKeyboard(.interactively)
             }
-            
-            .padding(.horizontal,20)
+
+            Divider().background(Color.appDivider)
+
+            // Input bar
+            HStack(spacing: AppSpacing.sm + 2) {
+                Avatar(monogram: "M", size: 34)
+
+                TextField("Add a comment…", text: $newCommentText)
+                    .font(AppFont.body)
+                    .foregroundColor(.appText)
+                    .padding(.horizontal, AppSpacing.md)
+                    .frame(height: 40)
+                    .background(Capsule().fill(Color.appSurfaceAlt))
+                    .focused($inputFocused)
+                    .submitLabel(.send)
+                    .onSubmit(postComment)
+
+                Button(action: postComment) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundColor(newCommentText.isEmpty ? .appTextSecondary : .appAccent)
+                }
+                .disabled(newCommentText.isEmpty)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm + 2)
         }
-        .presentationDetents([.fraction(0.8)])
-        .foregroundColor(.black)
+    }
+
+    private func postComment() {
+        let text = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        model.addComment(text: text, publisher: "myhome")
+        newCommentText = ""
+    }
+}
+
+private struct CommentRow: View {
+    let comment: CommentViewModel.Comment
+
+    var body: some View {
+        HStack(alignment: .top, spacing: AppSpacing.sm + 2) {
+            Avatar(systemImage: comment.userImage, size: 34)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(comment.publisher)
+                        .font(AppFont.inter(13, .semibold))
+                        .foregroundColor(.appText)
+                    Text(timeAgo)
+                        .font(AppFont.inter(12, .regular))
+                        .foregroundColor(.appTextSecondary)
+                }
+                Text(comment.text)
+                    .font(AppFont.inter(14, .regular))
+                    .foregroundColor(.appText)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var timeAgo: String {
+        guard Date().timeIntervalSince(comment.timestamp) >= 60 else { return "now" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: comment.timestamp, relativeTo: Date())
     }
 }
 
 #Preview {
     @Previewable @State var commentViewModel = CommentViewModel()
-    
+
     CommentSectionView(viewModel: $commentViewModel)
 }
