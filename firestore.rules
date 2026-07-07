@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// ARchitect Firestore rules
+// - Everything requires a signed-in user.
+// - Users own their profile document.
+// - Posts: author-only edits/deletes; any signed-in user may toggle likes
+//   (likedBy) or bump the denormalized comment counter.
+// - Comments: attributed to their author; author-only deletes.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.username is string
+        && request.resource.data.title is string
+        && request.resource.data.description is string;
+
+      allow update: if isSignedIn() && (
+        resource.data.authorUid == request.auth.uid
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy'])
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
+      );
+
+      allow delete: if isSignedIn() && resource.data.authorUid == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+
+        allow create: if isSignedIn()
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000;
+
+        allow update: if false;
+        allow delete: if isSignedIn() && resource.data.authorUid == request.auth.uid;
+      }
+    }
+  }
+}

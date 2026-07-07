@@ -4,19 +4,25 @@ import SwiftUI
 /// avatars, and an input bar pinned to the bottom.
 struct CommentSectionView: View {
     @Binding var viewModel: CommentViewModel
+    @EnvironmentObject var session: SessionStore
 
     var body: some View {
         // The class is handed down as a binding from Post; observe it in an
         // inner view so newly posted comments actually refresh the list.
-        CommentSheetContent(model: viewModel)
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(Color.appBackground)
+        CommentSheetContent(
+            model: viewModel,
+            currentUsername: session.profile?.username ?? "you"
+        )
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Color.appBackground)
+        .onAppear { viewModel.startObserving() }
     }
 }
 
 private struct CommentSheetContent: View {
     @ObservedObject var model: CommentViewModel
+    let currentUsername: String
     @State private var newCommentText = ""
     @FocusState private var inputFocused: Bool
 
@@ -56,7 +62,7 @@ private struct CommentSheetContent: View {
 
             // Input bar
             HStack(spacing: AppSpacing.sm + 2) {
-                Avatar(monogram: "M", size: 34)
+                Avatar(monogram: currentUsername, size: 34)
 
                 TextField("Add a comment…", text: $newCommentText)
                     .font(AppFont.body)
@@ -83,7 +89,7 @@ private struct CommentSheetContent: View {
     private func postComment() {
         let text = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        model.addComment(text: text, publisher: "myhome")
+        model.addComment(text: text, publisher: currentUsername)
         newCommentText = ""
     }
 }
@@ -93,7 +99,7 @@ private struct CommentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: AppSpacing.sm + 2) {
-            Avatar(systemImage: comment.userImage, size: 34)
+            Avatar(monogram: comment.publisher, size: 34)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -125,4 +131,5 @@ private struct CommentRow: View {
     @Previewable @State var commentViewModel = CommentViewModel()
 
     CommentSectionView(viewModel: $commentViewModel)
+        .environmentObject(SessionStore())
 }

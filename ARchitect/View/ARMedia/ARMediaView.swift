@@ -10,47 +10,13 @@
 import SwiftUI
 
 struct ARMediaView: View {
-    @State var posts: [Post]
+    @EnvironmentObject var session: SessionStore
+    @StateObject private var feed = FeedStore()
     @State private var storyPost: Post? = nil
     @State private var showStoryPost = false
     @State private var showARCamera = false
 
-    init() {
-        //Firebase call gets all posts
-        posts = [
-            Post(
-                username: "username",
-                userImage: "person.circle.fill", // SF Symbol for user avatar
-                title: "1990 Vintage",
-                imageName: "ar_room1", // Replace with actual asset name
-                description: "Bold interior design project that revives the vibrant energy of the early '80s. It marries vivid color schemes, geometric patterns, and nostalgic accents with contemporary comforts.",
-                likes: 35),
-            Post(
-                username: "Bob",
-                userImage: "person.circle.fill", // SF Symbol for user avatar
-                title: "Virtual Office",
-                imageName: "ar_room2", // Replace with actual asset name
-                description: "Bold interior design project that revives the vibrant energy of the early '80s. It marries vivid color schemes, geometric patterns, and nostalgic accents with contemporary comforts.",
-                likes: 28),
-
-            Post(
-                username: "Sam",
-                imageName: "ar_room3", // Replace with actual asset name
-                description: "My own room with amazing lighting and furniture. Explore how I have transfomed my space"),
-
-            Post(
-                username: "Paul",
-                imageName: "ar_room4", // Replace with actual asset name
-                description: "Bold interior design project that revives the vibrant energy of the early '80s. It marries vivid color schemes, geometric patterns, and nostalgic accents with contemporary comforts."),
-            Post(imageName: "ar_room5"),
-
-            Post(
-                username: "Steven",
-                imageName: "ar_room6", // Replace with actual asset name
-                description: "My own room with amazing lighting and furniture. Explore how I have transfomed my space"),
-            Post(imageName: "ar_room7")
-        ]
-    }
+    private var posts: [Post] { feed.posts }
 
     var body: some View {
         ZStack {
@@ -67,21 +33,56 @@ struct ARMediaView: View {
 
                         Divider().background(Color.appDivider)
 
-                        ForEach(posts) { post in
-                            FeedPostCard(post: post)
+                        if feed.isLoading {
+                            ProgressView()
+                                .tint(.appPrimary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 80)
+                        } else if posts.isEmpty {
+                            emptyFeed
+                        } else {
+                            ForEach(posts) { post in
+                                FeedPostCard(post: post)
+                            }
                         }
                     }
                     .padding(.bottom, 90) // clear the floating tab bar
                 }
                 .refreshable {
-                    // Placeholder until the feed loads from Firebase.
-                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    // The snapshot listener keeps the feed live; this is just
+                    // the familiar gesture.
+                    try? await Task.sleep(nanoseconds: 400_000_000)
                 }
             }
         }
         // This view supplies its own header, so hide the native nav bar to
         // avoid a duplicate empty bar above it.
         .toolbar(.hidden, for: .navigationBar)
+        // Security rules require a signed-in user, and a listener attached
+        // pre-auth stays denied — so (re)attach whenever auth flips on.
+        .task(id: session.isAuthenticated) {
+            if session.isAuthenticated {
+                feed.restart()
+            } else {
+                feed.stopListening()
+            }
+        }
+    }
+
+    private var emptyFeed: some View {
+        VStack(spacing: AppSpacing.sm) {
+            Image(systemName: "camera")
+                .font(.system(size: 40, weight: .light))
+                .foregroundColor(.appTextSecondary)
+            Text("No posts yet")
+                .font(AppFont.inter(17, .semibold))
+                .foregroundColor(.appText)
+            Text("Capture a space in AR to share the first one.")
+                .font(AppFont.inter(13, .regular))
+                .foregroundColor(.appTextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
     }
 
     private var feedHeader: some View {
@@ -127,8 +128,7 @@ struct ARMediaView: View {
             }
         }
         .fullScreenCover(isPresented: $showARCamera) {
-            ARViewControllerWrapper()
-                .ignoresSafeArea()
+            ARCaptureView()
         }
     }
 
@@ -145,6 +145,41 @@ struct ARMediaView: View {
 
 #Preview {
     ARMediaView()
+        .environmentObject(SessionStore())
+}
+
+// MARK: - Post image
+
+/// Renders the post photo from whichever source the post carries: an
+/// embedded JPEG (user-created posts), a bundled asset (seeded posts), or a
+/// Storage download URL (future migration path).
+struct PostImage: View {
+    let post: Post
+
+    var body: some View {
+        if let data = post.imageData, let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+        } else if let urlString = post.imageURL, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    Image(systemName: "photo")
+                        .font(.system(size: 40))
+                        .foregroundColor(.appTextSecondary)
+                default:
+                    ProgressView().tint(.appPrimary)
+                }
+            }
+        } else {
+            Image(post.imageName)
+                .resizable()
+                .scaledToFill()
+        }
+    }
 }
 
 // MARK: - Feed post card
@@ -160,7 +195,7 @@ struct FeedPostCard: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header row
             HStack(spacing: 10) {
-                Avatar(systemImage: post.userImage, size: 34)
+                Avatar(monogram: post.username, size: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(post.username)
@@ -184,9 +219,7 @@ struct FeedPostCard: View {
 
             // Full-bleed image — tap to open the post, double-tap to like.
             ZStack {
-                Image(post.imageName)
-                    .resizable()
-                    .scaledToFill()
+                PostImage(post: post)
                     .frame(height: 380)
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.horizontal)

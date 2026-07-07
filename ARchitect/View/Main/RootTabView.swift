@@ -65,8 +65,7 @@ struct RootTabView: View {
         .ignoresSafeArea(edges: .bottom)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .fullScreenCover(isPresented: $isShowingAR) {
-            ARViewControllerWrapper()
-                .ignoresSafeArea()
+            ARCaptureView()
         }
     }
 

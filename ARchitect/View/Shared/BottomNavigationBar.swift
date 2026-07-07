@@ -73,14 +73,6 @@ struct BottomNavigationBar: View {
     }
 }
 
-struct ARViewControllerWrapper: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> ARViewController {
-        return ARViewController()
-    }
-
-    func updateUIViewController(_ uiViewController: ARViewController, context: Context) {}
-}
-
 #Preview {
     ZStack(alignment: .bottom) {
         Color.appBackground.ignoresSafeArea()

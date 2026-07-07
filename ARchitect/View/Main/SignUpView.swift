@@ -2,18 +2,24 @@
 //  SignUpView.swift
 //  ARchitect
 //
-//  Instagram-style sign up: wordmark, soft fields, a primary action, and a
-//  "log in" link at the bottom.
+//  Instagram-style sign up backed by Firebase: wordmark, soft fields, a
+//  primary action, and a "log in" link at the bottom.
 //
 
 import SwiftUI
 
 struct SignUpView: View {
+    @EnvironmentObject var session: SessionStore
     @Environment(\.dismiss) private var dismiss
     @State private var username: String = ""
     @State private var email: String = ""
     @State private var password: String = ""
-    @Binding var isAuthenticated: Bool
+    @State private var errorMessage: String?
+    @State private var isLoading = false
+
+    private var isValid: Bool {
+        !username.isEmpty && !email.isEmpty && password.count >= 6
+    }
 
     var body: some View {
         ZStack {
@@ -44,14 +50,30 @@ struct SignUpView: View {
 
                 VStack(spacing: AppSpacing.sm) {
                     AuthField(placeholder: "Username", text: $username)
-                    AuthField(placeholder: "Email", text: $email)
-                    AuthField(placeholder: "Password", text: $password, isSecure: true)
+                    AuthField(placeholder: "Email", text: $email, keyboard: .emailAddress)
+                    AuthField(placeholder: "Password (6+ characters)", text: $password, isSecure: true)
                 }
 
-                Button("Sign up") {
-                    isAuthenticated = true
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(AppFont.inter(12, .medium))
+                        .foregroundColor(.appLike)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, AppSpacing.sm)
+                }
+
+                Button {
+                    signUp()
+                } label: {
+                    if isLoading {
+                        ProgressView().tint(.appOnPrimary)
+                    } else {
+                        Text("Sign up")
+                    }
                 }
                 .buttonStyle(PrimaryButtonStyle())
+                .disabled(isLoading || !isValid)
+                .opacity(isValid ? 1 : 0.6)
                 .padding(.top, AppSpacing.md)
 
                 Text("By signing up, you agree to our Terms and Privacy Policy.")
@@ -76,8 +98,23 @@ struct SignUpView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
     }
+
+    private func signUp() {
+        errorMessage = nil
+        isLoading = true
+        Task {
+            do {
+                try await session.signUp(username: username, email: email, password: password)
+                // Success dismisses the auth sheet via the auth-state listener.
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
+        }
+    }
 }
 
 #Preview {
-    SignUpView(isAuthenticated: .constant(false))
+    SignUpView()
+        .environmentObject(SessionStore())
 }
