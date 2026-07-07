@@ -33,6 +33,7 @@ class Post: ObservableObject, Identifiable {
     let imageURL: String?
     let imageData: Data?
     let description: String
+    let authorUid: String
     let timeAgo: Date
     @Published var likes: Int
     @Published var user_liked: Bool
@@ -49,6 +50,7 @@ class Post: ObservableObject, Identifiable {
         self.imageURL = data["imageURL"] as? String
         self.imageData = data["imageData"] as? Data
         self.description = data["description"] as? String ?? ""
+        self.authorUid = data["authorUid"] as? String ?? ""
         self.timeAgo = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
 
         let likedBy = data["likedBy"] as? [String] ?? []
@@ -73,6 +75,7 @@ class Post: ObservableObject, Identifiable {
         self.imageURL = nil
         self.imageData = nil
         self.description = description
+        self.authorUid = ""
         self.timeAgo = Date()
         self.likes = likes
         self.user_liked = user_liked
@@ -89,6 +92,7 @@ class Post: ObservableObject, Identifiable {
         self.imageURL = nil
         self.imageData = nil
         self.description = "Lengthy description about the furniture and the positioning of different elements that were used."
+        self.authorUid = ""
         self.timeAgo = Date()
         self.likes = 80
         self.user_liked = false
