@@ -2,16 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIAppFonts</key>
-	<array>
-		<string>Inter_400Regular.ttf</string>
-		<string>Inter_500Medium.ttf</string>
-		<string>Inter_600SemiBold.ttf</string>
-		<string>Inter_700Bold.ttf</string>
-		<string>Fraunces_500Medium.ttf</string>
-		<string>Fraunces_600SemiBold.ttf</string>
-		<string>Fraunces_700Bold.ttf</string>
-	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -22,6 +12,16 @@
 				<string>com.googleusercontent.apps.804839866996-lu771k9jij261am6gt5p5jebjf7d9mvj</string>
 			</array>
 		</dict>
+	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Inter_400Regular.ttf</string>
+		<string>Inter_500Medium.ttf</string>
+		<string>Inter_600SemiBold.ttf</string>
+		<string>Inter_700Bold.ttf</string>
+		<string>Fraunces_500Medium.ttf</string>
+		<string>Fraunces_600SemiBold.ttf</string>
+		<string>Fraunces_700Bold.ttf</string>
 	</array>
 </dict>
 </plist>

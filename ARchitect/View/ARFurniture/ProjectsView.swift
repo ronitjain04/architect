@@ -6,12 +6,14 @@ import SwiftUI
 struct ProfileView: View {
     @State private var selectedSection: ProfileSection = .grid
     @State private var selectedProject: Project? = nil
+    @State private var showEditProfile = false
+    @State private var showARCamera = false
 
     enum ProfileSection { case grid, locked, saved }
 
     let handle = "myhome"
-    let displayName = "My Home Studio"
-    let bio = "Interior designer · AR spaces\nMinimalist + sunlit rooms"
+    @State private var displayName = "My Home Studio"
+    @State private var bio = "Interior designer · AR spaces\nMinimalist + sunlit rooms"
 
     let projects = [
         Project(name: "Minimalistic", tags: ["Minimalistic"], isLocked: true, image: "Minimalistic", modified: "August 23, 2022"),
@@ -68,17 +70,20 @@ struct ProfileView: View {
             Text(handle)
                 .font(AppFont.inter(18, .semibold))
                 .foregroundColor(.appText)
-            Image(systemName: "chevron.down")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.appText)
             Spacer()
-            Image(systemName: "plus.app")
-            Image(systemName: "line.3.horizontal")
+            // Capture a new space in AR.
+            Button { showARCamera = true } label: {
+                Image(systemName: "plus.app")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundColor(.appText)
+            }
         }
-        .font(.system(size: 22, weight: .regular))
-        .foregroundColor(.appText)
         .padding(.horizontal, AppSpacing.md)
         .padding(.vertical, 10)
+        .fullScreenCover(isPresented: $showARCamera) {
+            ARViewControllerWrapper()
+                .ignoresSafeArea()
+        }
     }
 
     // MARK: Header
@@ -111,15 +116,20 @@ struct ProfileView: View {
             }
 
             HStack(spacing: AppSpacing.sm) {
-                Button { } label: { Text("Edit profile") }
+                Button { showEditProfile = true } label: { Text("Edit profile") }
                     .buttonStyle(CompactSecondaryButtonStyle())
-                Button { } label: { Text("Share profile") }
-                    .buttonStyle(CompactSecondaryButtonStyle())
+                ShareLink(item: "Check out my ARchitect profile — @\(handle)") {
+                    Text("Share profile")
+                }
+                .buttonStyle(CompactSecondaryButtonStyle())
             }
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.top, AppSpacing.md)
         .padding(.bottom, AppSpacing.md)
+        .sheet(isPresented: $showEditProfile) {
+            EditProfileSheet(displayName: $displayName, bio: $bio)
+        }
     }
 
     private func stat(value: String, label: String) -> some View {
@@ -247,6 +257,54 @@ struct ProfileView: View {
     }
 }
 
+/// Edits the local profile fields — persists to the user's document once
+/// accounts are backed by Firebase.
+struct EditProfileSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var displayName: String
+    @Binding var bio: String
+
+    var body: some View {
+        VStack(spacing: AppSpacing.md) {
+            Text("Edit profile")
+                .font(AppFont.inter(15, .semibold))
+                .foregroundColor(.appText)
+                .padding(.top, AppSpacing.md)
+
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                Text("Name")
+                    .font(AppFont.inter(13, .semibold))
+                    .foregroundColor(.appTextSecondary)
+                AuthField(placeholder: "Name", text: $displayName)
+            }
+
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                Text("Bio")
+                    .font(AppFont.inter(13, .semibold))
+                    .foregroundColor(.appTextSecondary)
+                TextField("Bio", text: $bio, axis: .vertical)
+                    .lineLimit(2...4)
+                    .font(AppFont.body)
+                    .foregroundColor(.appText)
+                    .padding(AppSpacing.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                            .fill(Color.appSurfaceAlt)
+                    )
+            }
+
+            Button("Done") { dismiss() }
+                .buttonStyle(PrimaryButtonStyle())
+
+            Spacer()
+        }
+        .padding(.horizontal, AppSpacing.lg)
+        .presentationDetents([.height(380)])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Color.appBackground)
+    }
+}
+
 /// Quiet, compact tan button used for the profile's "Edit profile" / "Share".
 struct CompactSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -296,6 +354,10 @@ struct ProjectGridCell: View {
                 }
             }
             .clipped()
+            // scaledToFill overflows the square; without an explicit content
+            // shape the overflow still hit-tests and taps bleed into
+            // neighboring cells.
+            .contentShape(Rectangle())
     }
 }
 

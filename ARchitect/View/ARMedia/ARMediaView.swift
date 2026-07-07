@@ -11,6 +11,9 @@ import SwiftUI
 
 struct ARMediaView: View {
     @State var posts: [Post]
+    @State private var storyPost: Post? = nil
+    @State private var showStoryPost = false
+    @State private var showARCamera = false
 
     init() {
         //Firebase call gets all posts
@@ -88,13 +91,6 @@ struct ARMediaView: View {
                 .foregroundColor(.appText)
 
             Spacer()
-
-            HStack(spacing: AppSpacing.lg) {
-                Image(systemName: "heart")
-                Image(systemName: "paperplane")
-            }
-            .font(.system(size: 22, weight: .regular))
-            .foregroundColor(.appText)
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.vertical, 10)
@@ -103,13 +99,36 @@ struct ARMediaView: View {
     private var storiesRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: AppSpacing.md) {
-                StoryRing(systemImage: "plus", label: "Your AR", isAdd: true)
+                // "Your AR" opens the AR camera to capture a new space.
+                Button { showARCamera = true } label: {
+                    StoryRing(systemImage: "plus", label: "Your AR", isAdd: true)
+                }
+                .buttonStyle(.plain)
+
+                // A user's ring opens their latest post.
                 ForEach(uniqueStoryUsers, id: \.self) { name in
-                    StoryRing(monogram: name, label: name)
+                    Button {
+                        if let post = posts.first(where: { $0.username == name }) {
+                            storyPost = post
+                            showStoryPost = true
+                        }
+                    } label: {
+                        StoryRing(monogram: name, label: name)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.vertical, AppSpacing.md)
+        }
+        .navigationDestination(isPresented: $showStoryPost) {
+            if let storyPost {
+                PostView(post: storyPost)
+            }
+        }
+        .fullScreenCover(isPresented: $showARCamera) {
+            ARViewControllerWrapper()
+                .ignoresSafeArea()
         }
     }
 
@@ -212,8 +231,14 @@ struct FeedPostCard: View {
 
                 Spacer()
 
-                Image(systemName: "bookmark")
-                    .foregroundColor(.appText)
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    post.toggleSaved()
+                } label: {
+                    Image(systemName: post.saved ? "bookmark.fill" : "bookmark")
+                        .foregroundColor(.appText)
+                        .symbolEffect(.bounce, value: post.saved)
+                }
             }
             .font(.system(size: 23, weight: .regular))
             .padding(.horizontal, AppSpacing.md)

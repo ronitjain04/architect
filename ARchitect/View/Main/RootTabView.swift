@@ -60,7 +60,9 @@ struct RootTabView: View {
                 onProfile: { select(.profile) }
             )
         }
-        // Keep the bar anchored even when a keyboard appears.
+        // Extend under the home indicator so the bar hugs the physical bottom
+        // (Instagram-style), and keep it anchored when a keyboard appears.
+        .ignoresSafeArea(edges: .bottom)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .fullScreenCover(isPresented: $isShowingAR) {
             ARViewControllerWrapper()

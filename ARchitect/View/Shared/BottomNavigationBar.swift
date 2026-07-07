@@ -40,12 +40,13 @@ struct BottomNavigationBar: View {
             profileButton
         }
         .padding(.top, 12)
+        // The bar sits at the physical bottom (the root ignores the bottom
+        // safe area); this clears the home indicator, Instagram-style.
         .padding(.bottom, 28)
         .padding(.horizontal, AppSpacing.sm)
         .background(
             Color.appBackground
                 .overlay(Rectangle().fill(Color.appDivider).frame(height: 0.5), alignment: .top)
-                .ignoresSafeArea(edges: .bottom)
         )
     }
 

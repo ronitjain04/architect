@@ -106,7 +106,14 @@ struct PostView: View {
                                 Image(systemName: "paperplane").foregroundColor(.appText)
                             }
                             Spacer()
-                            Image(systemName: "bookmark").foregroundColor(.appText)
+                            Button {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                post.toggleSaved()
+                            } label: {
+                                Image(systemName: post.saved ? "bookmark.fill" : "bookmark")
+                                    .foregroundColor(.appText)
+                                    .symbolEffect(.bounce, value: post.saved)
+                            }
                         }
                         .font(.system(size: 23, weight: .regular))
                         .padding(.horizontal, AppSpacing.md)

@@ -131,6 +131,10 @@ struct ExploreCell: View {
             }
             .background(Color.appSurface)
             .clipped()
+            // scaledToFill overflows the square; without an explicit content
+            // shape the overflow still hit-tests and taps bleed into
+            // neighboring cells.
+            .contentShape(Rectangle())
     }
 }
 
