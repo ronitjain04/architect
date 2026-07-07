@@ -8,28 +8,24 @@
 import SwiftUI
 
 struct MainView: View {
-    @State private var isAuthenticated: Bool = false
-    @State private var selectedTab = 0
-    
-    
+    @StateObject private var session = SessionStore()
+
     var body: some View {
-        tabController
+        RootTabView()
             // App-wide Inter default typography + tint.
             .font(AppFont.body)
             .tint(.appPrimary)
+            .environmentObject(session)
             .sheet(isPresented: Binding(get: {
-                !isAuthenticated
+                !session.isAuthenticated
             }, set: { _ in })) {
-                AuthenticationView(isAuthenticated: $isAuthenticated)
+                AuthenticationView()
+                    .environmentObject(session)
                     .interactiveDismissDisabled(true)
                     // Sheets get a fresh environment, so apply here too.
                     .font(AppFont.body)
                     .tint(.appPrimary)
             }
-    }
-
-    var tabController: some View {
-        RootTabView()
     }
 }
 

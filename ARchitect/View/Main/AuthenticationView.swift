@@ -5,11 +5,13 @@ import FirebaseAuth
 
 /// The entry/login screen — an Instagram-style centered layout: a serif
 /// wordmark, soft cream fields, a primary "Log in" action, a Google option,
-/// and a sign-up link pinned to the bottom.
+/// and a sign-up link pinned to the bottom. Backed by real Firebase auth.
 struct AuthenticationView: View {
-    @Binding var isAuthenticated: Bool
-    @State private var username: String = ""
+    @EnvironmentObject var session: SessionStore
+    @State private var email: String = ""
     @State private var password: String = ""
+    @State private var errorMessage: String?
+    @State private var isLoading = false
 
     var body: some View {
         NavigationStack {
@@ -32,20 +34,38 @@ struct AuthenticationView: View {
 
                     // Fields
                     VStack(spacing: AppSpacing.sm) {
-                        AuthField(placeholder: "Username", text: $username)
+                        AuthField(placeholder: "Email", text: $email, keyboard: .emailAddress)
                         AuthField(placeholder: "Password", text: $password, isSecure: true)
                     }
 
-                    Button("Forgot password?") { }
-                        .font(AppFont.inter(12, .medium))
-                        .foregroundColor(.appAccent)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .padding(.top, AppSpacing.sm)
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(AppFont.inter(12, .medium))
+                            .foregroundColor(.appLike)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, AppSpacing.sm)
+                    }
 
-                    Button("Log in") {
-                        isAuthenticated = true
+                    Button("Forgot password?") {
+                        sendPasswordReset()
+                    }
+                    .font(AppFont.inter(12, .medium))
+                    .foregroundColor(.appAccent)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, AppSpacing.sm)
+
+                    Button {
+                        logIn()
+                    } label: {
+                        if isLoading {
+                            ProgressView().tint(.appOnPrimary)
+                        } else {
+                            Text("Log in")
+                        }
                     }
                     .buttonStyle(PrimaryButtonStyle())
+                    .disabled(isLoading || email.isEmpty || password.isEmpty)
+                    .opacity(email.isEmpty || password.isEmpty ? 0.6 : 1)
                     .padding(.top, AppSpacing.md)
 
                     // Divider
@@ -59,7 +79,7 @@ struct AuthenticationView: View {
                     .padding(.vertical, AppSpacing.lg)
 
                     socialButton(label: "Continue with Google", iconName: "g.circle.fill") {
-                        googleSignIn()
+                        session.signInWithGoogle()
                     }
 
                     Spacer()
@@ -67,7 +87,7 @@ struct AuthenticationView: View {
                     Divider().background(Color.appDivider)
 
                     NavigationLink {
-                        SignUpView(isAuthenticated: $isAuthenticated)
+                        SignUpView()
                     } label: {
                         (Text("Don't have an account? ").foregroundColor(.appTextSecondary)
                          + Text("Sign up").foregroundColor(.appAccent))
@@ -85,9 +105,33 @@ struct AuthenticationView: View {
         Rectangle().fill(Color.appDivider).frame(height: 1)
     }
 
-    func googleSignIn() {
-        GoogleAuthService.signIn {
-            isAuthenticated = true
+    private func logIn() {
+        errorMessage = nil
+        isLoading = true
+        Task {
+            do {
+                try await session.logIn(email: email, password: password)
+                // Success dismisses the sheet via the auth-state listener.
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
+        }
+    }
+
+    private func sendPasswordReset() {
+        guard !email.isEmpty else {
+            errorMessage = "Enter your email above first, then tap Forgot password."
+            return
+        }
+        errorMessage = nil
+        Task {
+            do {
+                try await Auth.auth().sendPasswordReset(withEmail: email)
+                errorMessage = "Password reset email sent to \(email)."
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -113,6 +157,7 @@ struct AuthField: View {
     let placeholder: String
     @Binding var text: String
     var isSecure: Bool = false
+    var keyboard: UIKeyboardType = .default
 
     var body: some View {
         Group {
@@ -122,6 +167,7 @@ struct AuthField: View {
                 TextField(placeholder, text: $text)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .keyboardType(keyboard)
             }
         }
         .font(AppFont.body)
@@ -136,5 +182,6 @@ struct AuthField: View {
 }
 
 #Preview {
-    AuthenticationView(isAuthenticated: .constant(false))
+    AuthenticationView()
+        .environmentObject(SessionStore())
 }

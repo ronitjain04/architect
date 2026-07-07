@@ -4,16 +4,21 @@ import SwiftUI
 /// project/follower stats, bio, and action buttons sits above a 3-column grid
 /// of the user's projects (the app's closest thing to a personal gallery).
 struct ProfileView: View {
+    @EnvironmentObject var session: SessionStore
     @State private var selectedSection: ProfileSection = .grid
     @State private var selectedProject: Project? = nil
     @State private var showEditProfile = false
     @State private var showARCamera = false
+    @State private var showLogOutDialog = false
 
     enum ProfileSection { case grid, locked, saved }
 
-    let handle = "myhome"
-    @State private var displayName = "My Home Studio"
-    @State private var bio = "Interior designer · AR spaces\nMinimalist + sunlit rooms"
+    private var handle: String { session.profile?.username ?? "you" }
+    private var displayName: String { session.profile?.displayName ?? "" }
+    private var bio: String {
+        let value = session.profile?.bio ?? ""
+        return value.isEmpty ? "Add a bio in Edit profile" : value
+    }
 
     let projects = [
         Project(name: "Minimalistic", tags: ["Minimalistic"], isLocked: true, image: "Minimalistic", modified: "August 23, 2022"),
@@ -77,12 +82,24 @@ struct ProfileView: View {
                     .font(.system(size: 22, weight: .regular))
                     .foregroundColor(.appText)
             }
+            // Account menu.
+            Button { showLogOutDialog = true } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundColor(.appText)
+            }
+            .padding(.leading, AppSpacing.sm)
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.vertical, 10)
         .fullScreenCover(isPresented: $showARCamera) {
             ARViewControllerWrapper()
                 .ignoresSafeArea()
+        }
+        .confirmationDialog("Account", isPresented: $showLogOutDialog) {
+            Button("Log out", role: .destructive) {
+                session.signOut()
+            }
         }
     }
 
@@ -128,7 +145,11 @@ struct ProfileView: View {
         .padding(.top, AppSpacing.md)
         .padding(.bottom, AppSpacing.md)
         .sheet(isPresented: $showEditProfile) {
-            EditProfileSheet(displayName: $displayName, bio: $bio)
+            EditProfileSheet(
+                displayName: session.profile?.displayName ?? "",
+                bio: session.profile?.bio ?? ""
+            )
+            .environmentObject(session)
         }
     }
 
@@ -257,12 +278,13 @@ struct ProfileView: View {
     }
 }
 
-/// Edits the local profile fields — persists to the user's document once
-/// accounts are backed by Firebase.
+/// Edits the profile fields and persists them to the user's Firestore
+/// document.
 struct EditProfileSheet: View {
+    @EnvironmentObject var session: SessionStore
     @Environment(\.dismiss) private var dismiss
-    @Binding var displayName: String
-    @Binding var bio: String
+    @State var displayName: String
+    @State var bio: String
 
     var body: some View {
         VStack(spacing: AppSpacing.md) {
@@ -293,8 +315,13 @@ struct EditProfileSheet: View {
                     )
             }
 
-            Button("Done") { dismiss() }
-                .buttonStyle(PrimaryButtonStyle())
+            Button("Done") {
+                Task {
+                    await session.updateProfile(displayName: displayName, bio: bio)
+                    dismiss()
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
 
             Spacer()
         }
@@ -364,5 +391,6 @@ struct ProjectGridCell: View {
 struct ProfileView_Previews: PreviewProvider {
     static var previews: some View {
         ProfileView()
+            .environmentObject(SessionStore())
     }
 }
