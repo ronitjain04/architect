@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import UIKit
 import FirebaseCore
 import FirebaseFirestore
 
@@ -48,6 +49,62 @@ final class FeedStore: ObservableObject {
 
     deinit {
         listener?.remove()
+    }
+
+    // MARK: - Create
+
+    enum CreatePostError: LocalizedError {
+        case imageEncoding
+        var errorDescription: String? { "Couldn't encode the captured image." }
+    }
+
+    /// Creates the post document with the capture embedded as a compressed
+    /// JPEG (Spark-plan friendly — no Storage bucket needed). The feed's
+    /// snapshot listener picks it up immediately.
+    ///
+    /// Migration note: the read path (PostImage) also renders an `imageURL`
+    /// field, so moving to Firebase Storage later only means swapping the
+    /// write below for an upload + URL — old embedded posts keep working.
+    static func createPost(
+        image: UIImage,
+        title: String,
+        description: String,
+        furniture: [String],
+        username: String
+    ) async throws {
+        let data = try compressedImageData(from: image)
+
+        try await Firestore.firestore().collection("posts").addDocument(data: [
+            "username": username,
+            "title": title,
+            "description": description,
+            "imageData": data,
+            "furnitureModels": furniture,
+            "createdAt": FieldValue.serverTimestamp(),
+            "likedBy": [],
+            "commentCount": 0,
+        ])
+    }
+
+    /// Resizes to feed size and walks JPEG quality down until the bytes fit
+    /// comfortably inside Firestore's 1 MB document limit.
+    private static func compressedImageData(from image: UIImage, maxDimension: CGFloat = 800) throws -> Data {
+        let largestSide = max(image.size.width, image.size.height)
+        let scale = min(1, maxDimension / max(largestSide, 1))
+        let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+
+        for quality in [0.7, 0.5, 0.35, 0.2] {
+            if let data = resized.jpegData(compressionQuality: quality), data.count < 850_000 {
+                return data
+            }
+        }
+        throw CreatePostError.imageEncoding
     }
 
     #if DEBUG

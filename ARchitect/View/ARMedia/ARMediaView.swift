@@ -119,8 +119,7 @@ struct ARMediaView: View {
             }
         }
         .fullScreenCover(isPresented: $showARCamera) {
-            ARViewControllerWrapper()
-                .ignoresSafeArea()
+            ARCaptureView()
         }
     }
 
@@ -141,13 +140,18 @@ struct ARMediaView: View {
 
 // MARK: - Post image
 
-/// Renders the post photo from the bundled asset (seeded posts) or the
-/// Storage download URL (user-created posts).
+/// Renders the post photo from whichever source the post carries: an
+/// embedded JPEG (user-created posts), a bundled asset (seeded posts), or a
+/// Storage download URL (future migration path).
 struct PostImage: View {
     let post: Post
 
     var body: some View {
-        if let urlString = post.imageURL, let url = URL(string: urlString) {
+        if let data = post.imageData, let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+        } else if let urlString = post.imageURL, let url = URL(string: urlString) {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):

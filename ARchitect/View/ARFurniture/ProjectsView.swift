@@ -93,8 +93,7 @@ struct ProfileView: View {
         .padding(.horizontal, AppSpacing.md)
         .padding(.vertical, 10)
         .fullScreenCover(isPresented: $showARCamera) {
-            ARViewControllerWrapper()
-                .ignoresSafeArea()
+            ARCaptureView()
         }
         .confirmationDialog("Account", isPresented: $showLogOutDialog) {
             Button("Log out", role: .destructive) {
@@ -254,7 +253,7 @@ struct ProfileView: View {
                     .font(AppFont.subheadline)
                     .foregroundColor(.appTextSecondary)
 
-                NavigationLink(destination: ARViewControllerWrapper().navigationBarBackButtonHidden(true)) {
+                NavigationLink(destination: ARCaptureView()) {
                     Text("Open Project")
                 }
                 .buttonStyle(PrimaryButtonStyle())

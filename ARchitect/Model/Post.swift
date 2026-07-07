@@ -9,7 +9,8 @@
 //  Firestore schema — posts/{id}:
 //    username, title, description: String
 //    imageAsset: String?   (bundled asset name — seeded demo posts)
-//    imageURL: String?     (Storage download URL — user-created posts)
+//    imageData: Data?      (embedded compressed JPEG — user-created posts)
+//    imageURL: String?     (Storage download URL — future migration path)
 //    createdAt: Timestamp
 //    likedBy: [uid]
 //    commentCount: Int
@@ -30,6 +31,7 @@ class Post: ObservableObject, Identifiable {
     let title: String
     let imageName: String
     let imageURL: String?
+    let imageData: Data?
     let description: String
     let timeAgo: Date
     @Published var likes: Int
@@ -46,6 +48,7 @@ class Post: ObservableObject, Identifiable {
         self.title = data["title"] as? String ?? ""
         self.imageName = data["imageAsset"] as? String ?? ""
         self.imageURL = data["imageURL"] as? String
+        self.imageData = data["imageData"] as? Data
         self.description = data["description"] as? String ?? ""
         self.timeAgo = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
 
@@ -69,6 +72,7 @@ class Post: ObservableObject, Identifiable {
         self.title = title
         self.imageName = imageName
         self.imageURL = nil
+        self.imageData = nil
         self.description = description
         self.timeAgo = Date()
         self.likes = likes
@@ -84,6 +88,7 @@ class Post: ObservableObject, Identifiable {
         self.title = "1990 Vintage"
         self.imageName = imageName
         self.imageURL = nil
+        self.imageData = nil
         self.description = "Lengthy description about the furniture and the positioning of different elements that were used."
         self.timeAgo = Date()
         self.likes = 80
