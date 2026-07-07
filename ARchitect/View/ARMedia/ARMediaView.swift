@@ -12,9 +12,6 @@ import SwiftUI
 struct ARMediaView: View {
     @EnvironmentObject var session: SessionStore
     @StateObject private var feed = FeedStore()
-    @State private var storyPost: Post? = nil
-    @State private var showStoryPost = false
-    @State private var showARCamera = false
 
     private var posts: [Post] { feed.posts }
 
@@ -29,10 +26,6 @@ struct ARMediaView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        storiesRail
-
-                        Divider().background(Color.appDivider)
-
                         if feed.isLoading {
                             ProgressView()
                                 .tint(.appPrimary)
@@ -97,50 +90,6 @@ struct ARMediaView: View {
         .padding(.vertical, 10)
     }
 
-    private var storiesRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AppSpacing.md) {
-                // "Your AR" opens the AR camera to capture a new space.
-                Button { showARCamera = true } label: {
-                    StoryRing(systemImage: "plus", label: "Your AR", isAdd: true)
-                }
-                .buttonStyle(.plain)
-
-                // A user's ring opens their latest post.
-                ForEach(uniqueStoryUsers, id: \.self) { name in
-                    Button {
-                        if let post = posts.first(where: { $0.username == name }) {
-                            storyPost = post
-                            showStoryPost = true
-                        }
-                    } label: {
-                        StoryRing(monogram: name, label: name)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.vertical, AppSpacing.md)
-        }
-        .navigationDestination(isPresented: $showStoryPost) {
-            if let storyPost {
-                PostView(post: storyPost)
-            }
-        }
-        .fullScreenCover(isPresented: $showARCamera) {
-            ARCaptureView()
-        }
-    }
-
-    /// Distinct usernames, in feed order, for the stories rail.
-    private var uniqueStoryUsers: [String] {
-        var seen = Set<String>()
-        return posts.compactMap { post in
-            guard !seen.contains(post.username) else { return nil }
-            seen.insert(post.username)
-            return post.username
-        }
-    }
 }
 
 #Preview {
