@@ -16,6 +16,7 @@ class CommentViewModel: ObservableObject {
     @Published var comments: [Comment] = []
 
     private let postDocID: String?
+    private let postAuthorUid: String
     private var listener: ListenerRegistration?
 
     struct Comment: Identifiable {
@@ -29,11 +30,13 @@ class CommentViewModel: ObservableObject {
     /// Local, in-memory comments (previews and sample posts).
     init() {
         postDocID = nil
+        postAuthorUid = ""
     }
 
     /// Comments backed by posts/{postDocID}/comments.
-    init(postDocID: String?) {
+    init(postDocID: String?, postAuthorUid: String = "") {
         self.postDocID = postDocID
+        self.postAuthorUid = postAuthorUid
     }
 
     deinit {
@@ -75,6 +78,15 @@ class CommentViewModel: ObservableObject {
             ])
             post.updateData(["commentCount": FieldValue.increment(Int64(1))])
             // The listener delivers the new comment; nothing to append locally.
+
+            if let uid = Auth.auth().currentUser?.uid {
+                NotificationService.writeComment(
+                    recipientUid: postAuthorUid,
+                    actorUid: uid,
+                    actorUsername: publisher,
+                    postID: postDocID
+                )
+            }
         } else {
             comments.append(Comment(
                 id: UUID().uuidString,

@@ -15,6 +15,7 @@ import FirebaseFirestore
 struct PublicUser {
     let profile: UserProfile
     let followingCount: Int
+    let uid: String
 }
 
 enum SocialService {
@@ -25,14 +26,17 @@ enum SocialService {
             .whereField("username", isEqualTo: username)
             .limit(to: 1)
             .getDocuments()
-        guard let data = snapshot?.documents.first?.data() else { return nil }
+        guard let document = snapshot?.documents.first else { return nil }
+        let data = document.data()
         return PublicUser(
             profile: UserProfile(
                 username: data["username"] as? String ?? username,
                 displayName: data["displayName"] as? String ?? "",
-                bio: data["bio"] as? String ?? ""
+                bio: data["bio"] as? String ?? "",
+                uid: document.documentID
             ),
-            followingCount: (data["following"] as? [String])?.count ?? 0
+            followingCount: (data["following"] as? [String])?.count ?? 0,
+            uid: document.documentID
         )
     }
 
@@ -64,6 +68,14 @@ enum SocialService {
         return posts.sorted { $0.timeAgo > $1.timeAgo }
     }
 
+    /// A single post by document ID — used by the activity feed to jump to
+    /// the post behind a like/comment notification.
+    static func fetchPost(id: String) async -> Post? {
+        guard let snapshot = try? await Firestore.firestore().collection("posts").document(id).getDocument(),
+              snapshot.exists, let data = snapshot.data() else { return nil }
+        return Post(docID: snapshot.documentID, data: data)
+    }
+
     /// How many users follow this username (server-side aggregate).
     static func followerCount(of username: String) async -> Int {
         let query = Firestore.firestore().collection("users")
@@ -87,7 +99,8 @@ enum SocialService {
             return UserProfile(
                 username: data["username"] as? String ?? "",
                 displayName: data["displayName"] as? String ?? "",
-                bio: data["bio"] as? String ?? ""
+                bio: data["bio"] as? String ?? "",
+                uid: doc.documentID
             )
         }
     }

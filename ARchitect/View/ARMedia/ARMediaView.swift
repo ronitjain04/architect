@@ -12,6 +12,7 @@ import SwiftUI
 struct ARMediaView: View {
     @EnvironmentObject var session: SessionStore
     @StateObject private var feed = FeedStore()
+    @State private var unreadCount = 0
 
     private var posts: [Post] { feed.posts }
 
@@ -45,6 +46,7 @@ struct ARMediaView: View {
                     // The snapshot listener keeps the feed live; this is just
                     // the familiar gesture.
                     try? await Task.sleep(nanoseconds: 400_000_000)
+                    await refreshUnreadCount()
                 }
             }
         }
@@ -59,7 +61,21 @@ struct ARMediaView: View {
             } else {
                 feed.stopListening()
             }
+            await refreshUnreadCount()
         }
+        // Also refresh whenever the feed tab's root reappears — e.g.
+        // returning from the activity screen after reading notifications.
+        .onAppear {
+            Task { await refreshUnreadCount() }
+        }
+    }
+
+    private func refreshUnreadCount() async {
+        guard let uid = session.user?.uid else {
+            unreadCount = 0
+            return
+        }
+        unreadCount = await NotificationService.unreadCount(uid: uid)
     }
 
     private var emptyFeed: some View {
@@ -85,6 +101,21 @@ struct ARMediaView: View {
                 .foregroundColor(.appText)
 
             Spacer()
+
+            NavigationLink(destination: ActivityView()) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "bell")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.appText)
+
+                    if unreadCount > 0 {
+                        Circle()
+                            .fill(Color.appLike)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 2, y: -2)
+                    }
+                }
+            }
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.vertical, 10)
@@ -200,7 +231,7 @@ struct FeedPostCard: View {
             HStack(spacing: 18) {
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    post.toggleLike()
+                    post.toggleLike(actorUsername: session.profile?.username ?? "")
                 } label: {
                     Image(systemName: post.user_liked ? "heart.fill" : "heart")
                         .foregroundColor(post.user_liked ? .appLike : .appText)
@@ -277,7 +308,7 @@ struct FeedPostCard: View {
     private func doubleTapLike() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         if !post.user_liked {
-            post.toggleLike()
+            post.toggleLike(actorUsername: session.profile?.username ?? "")
         }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             showHeartBurst = true

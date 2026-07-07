@@ -98,7 +98,7 @@ struct PostView: View {
                         HStack(spacing: 18) {
                             Button {
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                post.toggleLike()
+                                post.toggleLike(actorUsername: session.profile?.username ?? "")
                             } label: {
                                 Image(systemName: post.user_liked ? "heart.fill" : "heart")
                                     .foregroundColor(post.user_liked ? .appLike : .appText)

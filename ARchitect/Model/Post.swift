@@ -33,6 +33,7 @@ class Post: ObservableObject, Identifiable {
     let imageURL: String?
     let imageData: Data?
     let description: String
+    let authorUid: String
     let timeAgo: Date
     @Published var likes: Int
     @Published var user_liked: Bool
@@ -49,13 +50,14 @@ class Post: ObservableObject, Identifiable {
         self.imageURL = data["imageURL"] as? String
         self.imageData = data["imageData"] as? Data
         self.description = data["description"] as? String ?? ""
+        self.authorUid = data["authorUid"] as? String ?? ""
         self.timeAgo = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
 
         let likedBy = data["likedBy"] as? [String] ?? []
         self.likes = likedBy.count
         self.user_liked = Auth.auth().currentUser.map { likedBy.contains($0.uid) } ?? false
         self.commentCount = data["commentCount"] as? Int ?? 0
-        self.commentsModel = CommentViewModel(postDocID: docID)
+        self.commentsModel = CommentViewModel(postDocID: docID, postAuthorUid: self.authorUid)
     }
 
     /// Denormalized comment count from the post document; the live list loads
@@ -73,6 +75,7 @@ class Post: ObservableObject, Identifiable {
         self.imageURL = nil
         self.imageData = nil
         self.description = description
+        self.authorUid = ""
         self.timeAgo = Date()
         self.likes = likes
         self.user_liked = user_liked
@@ -89,6 +92,7 @@ class Post: ObservableObject, Identifiable {
         self.imageURL = nil
         self.imageData = nil
         self.description = "Lengthy description about the furniture and the positioning of different elements that were used."
+        self.authorUid = ""
         self.timeAgo = Date()
         self.likes = 80
         self.user_liked = false
@@ -99,7 +103,7 @@ class Post: ObservableObject, Identifiable {
     // MARK: - Actions
 
     /// Optimistic local flip; persists to the post document when remote.
-    func toggleLike() {
+    func toggleLike(actorUsername: String) {
         if user_liked {
             likes = max(likes - 1, 0)
         } else {
@@ -113,6 +117,22 @@ class Post: ObservableObject, Identifiable {
             : FieldValue.arrayRemove([uid])
         Firestore.firestore().collection("posts").document(docID)
             .updateData(["likedBy": update])
+
+        guard !actorUsername.isEmpty else { return }
+        if user_liked {
+            NotificationService.writeLike(
+                recipientUid: authorUid,
+                actorUid: uid,
+                actorUsername: actorUsername,
+                postID: docID
+            )
+        } else {
+            NotificationService.deleteLike(
+                recipientUid: authorUid,
+                actorUsername: actorUsername,
+                postID: docID
+            )
+        }
     }
 
     func addComment(text: String, publisher: String) {

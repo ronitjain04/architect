@@ -15,6 +15,19 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
+
+      match /notifications/{notifId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn()
+          && request.resource.data.actorUsername is string
+          && request.resource.data.type in ['like', 'comment', 'follow'];
+
+        allow update: if isSignedIn() && request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+
+        allow delete: if isSignedIn();
+      }
     }
 
     match /posts/{postId} {
