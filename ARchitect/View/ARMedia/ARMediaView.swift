@@ -61,6 +61,7 @@ struct ARMediaView: View {
             } else {
                 feed.stopListening()
             }
+            await refreshUnreadCount()
         }
         // Also refresh whenever the feed tab's root reappears — e.g.
         // returning from the activity screen after reading notifications.
