@@ -15,6 +15,7 @@ import FirebaseFirestore
 struct PublicUser {
     let profile: UserProfile
     let followingCount: Int
+    let uid: String
 }
 
 enum SocialService {
@@ -25,14 +26,16 @@ enum SocialService {
             .whereField("username", isEqualTo: username)
             .limit(to: 1)
             .getDocuments()
-        guard let data = snapshot?.documents.first?.data() else { return nil }
+        guard let document = snapshot?.documents.first else { return nil }
+        let data = document.data()
         return PublicUser(
             profile: UserProfile(
                 username: data["username"] as? String ?? username,
                 displayName: data["displayName"] as? String ?? "",
                 bio: data["bio"] as? String ?? ""
             ),
-            followingCount: (data["following"] as? [String])?.count ?? 0
+            followingCount: (data["following"] as? [String])?.count ?? 0,
+            uid: document.documentID
         )
     }
 

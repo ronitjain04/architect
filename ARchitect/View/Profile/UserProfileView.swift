@@ -116,7 +116,7 @@ struct UserProfileView: View {
             }
 
             if !isSelf {
-                FollowButton(username: username) { delta in
+                FollowButton(username: username, uid: publicUser?.uid) { delta in
                     followerCount = max(0, followerCount + delta)
                 }
             }
@@ -143,6 +143,9 @@ struct UserProfileView: View {
 struct FollowButton: View {
     @EnvironmentObject var session: SessionStore
     let username: String
+    /// The target's Firestore uid, when they have an account (nil for
+    /// seeded demo authors, who can still be followed but never notified).
+    let uid: String?
     /// Called with +1 / -1 so the presenting view can adjust its follower
     /// count optimistically.
     var onToggle: (Int) -> Void = { _ in }
@@ -151,7 +154,7 @@ struct FollowButton: View {
         let following = session.isFollowing(username)
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            session.toggleFollow(username)
+            session.toggleFollow(username: username, uid: uid)
             onToggle(following ? -1 : +1)
         } label: {
             Text(following ? "Following" : "Follow")

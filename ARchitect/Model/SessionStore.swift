@@ -104,14 +104,22 @@ final class SessionStore: ObservableObject {
         following.contains(username)
     }
 
-    func toggleFollow(_ username: String) {
+    func toggleFollow(username: String, uid: String?) {
         guard username != profile?.username else { return }
-        if following.contains(username) {
+        let wasFollowing = following.contains(username)
+        if wasFollowing {
             following.remove(username)
         } else {
             following.insert(username)
         }
         persistOwnDoc(["following": Array(following)])
+
+        guard let recipientUid = uid, let actorUid = user?.uid, let actorUsername = profile?.username else { return }
+        if wasFollowing {
+            NotificationService.deleteFollow(recipientUid: recipientUid, actorUsername: actorUsername)
+        } else {
+            NotificationService.writeFollow(recipientUid: recipientUid, actorUid: actorUid, actorUsername: actorUsername)
+        }
     }
 
     private func persistOwnDoc(_ fields: [String: Any]) {

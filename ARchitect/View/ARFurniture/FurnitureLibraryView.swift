@@ -143,7 +143,7 @@ struct FurnitureExploreView: View {
                                 Spacer()
 
                                 if user.username != session.profile?.username {
-                                    FollowButton(username: user.username)
+                                    FollowButton(username: user.username, uid: nil)
                                         .frame(width: 100)
                                 }
                             }
