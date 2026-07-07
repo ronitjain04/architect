@@ -12,9 +12,6 @@ import SwiftUI
 struct ARMediaView: View {
     @EnvironmentObject var session: SessionStore
     @StateObject private var feed = FeedStore()
-    @State private var storyPost: Post? = nil
-    @State private var showStoryPost = false
-    @State private var showARCamera = false
 
     private var posts: [Post] { feed.posts }
 
@@ -29,10 +26,6 @@ struct ARMediaView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        storiesRail
-
-                        Divider().background(Color.appDivider)
-
                         if feed.isLoading {
                             ProgressView()
                                 .tint(.appPrimary)
@@ -97,50 +90,6 @@ struct ARMediaView: View {
         .padding(.vertical, 10)
     }
 
-    private var storiesRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AppSpacing.md) {
-                // "Your AR" opens the AR camera to capture a new space.
-                Button { showARCamera = true } label: {
-                    StoryRing(systemImage: "plus", label: "Your AR", isAdd: true)
-                }
-                .buttonStyle(.plain)
-
-                // A user's ring opens their latest post.
-                ForEach(uniqueStoryUsers, id: \.self) { name in
-                    Button {
-                        if let post = posts.first(where: { $0.username == name }) {
-                            storyPost = post
-                            showStoryPost = true
-                        }
-                    } label: {
-                        StoryRing(monogram: name, label: name)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.vertical, AppSpacing.md)
-        }
-        .navigationDestination(isPresented: $showStoryPost) {
-            if let storyPost {
-                PostView(post: storyPost)
-            }
-        }
-        .fullScreenCover(isPresented: $showARCamera) {
-            ARCaptureView()
-        }
-    }
-
-    /// Distinct usernames, in feed order, for the stories rail.
-    private var uniqueStoryUsers: [String] {
-        var seen = Set<String>()
-        return posts.compactMap { post in
-            guard !seen.contains(post.username) else { return nil }
-            seen.insert(post.username)
-            return post.username
-        }
-    }
 }
 
 #Preview {
@@ -185,6 +134,7 @@ struct PostImage: View {
 // MARK: - Feed post card
 
 struct FeedPostCard: View {
+    @EnvironmentObject var session: SessionStore
     @ObservedObject var post: Post
     @State private var showComments = false
     @State private var showMenuSheet = false
@@ -193,18 +143,23 @@ struct FeedPostCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header row
+            // Header row — tapping the author opens their profile.
             HStack(spacing: 10) {
-                Avatar(monogram: post.username, size: 34)
+                NavigationLink(destination: UserProfileView(username: post.username)) {
+                    HStack(spacing: 10) {
+                        Avatar(monogram: post.username, size: 34)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(post.username)
-                        .font(AppFont.inter(13, .semibold))
-                        .foregroundColor(.appText)
-                    Text(post.title)
-                        .font(AppFont.inter(11, .regular))
-                        .foregroundColor(.appTextSecondary)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(post.username)
+                                .font(AppFont.inter(13, .semibold))
+                                .foregroundColor(.appText)
+                            Text(post.title)
+                                .font(AppFont.inter(11, .regular))
+                                .foregroundColor(.appTextSecondary)
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
 
                 Spacer()
 
@@ -266,11 +221,11 @@ struct FeedPostCard: View {
 
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    post.toggleSaved()
+                    session.toggleSaved(post.id)
                 } label: {
-                    Image(systemName: post.saved ? "bookmark.fill" : "bookmark")
+                    Image(systemName: session.isSaved(post.id) ? "bookmark.fill" : "bookmark")
                         .foregroundColor(.appText)
-                        .symbolEffect(.bounce, value: post.saved)
+                        .symbolEffect(.bounce, value: session.isSaved(post.id))
                 }
             }
             .font(.system(size: 23, weight: .regular))
