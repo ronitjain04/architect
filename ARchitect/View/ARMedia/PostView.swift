@@ -19,7 +19,7 @@ struct PostView: View {
     let objects: [VREnvironmentConfig.VRObjectConfig]
 
     init(post: Post, showComments: Bool = false) {
-        let postID = post.id
+        let postID = post.uuid
 
         self.post = post
         self.showComments = showComments
@@ -45,7 +45,7 @@ struct PostView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         // Author row
                         HStack(spacing: 10) {
-                            Avatar(systemImage: post.userImage, size: 34)
+                            Avatar(monogram: post.username, size: 34)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(post.username)
                                     .font(AppFont.inter(13, .semibold))
@@ -68,9 +68,7 @@ struct PostView: View {
                         NavigationLink(destination: ARSessionView2(config: environment)
                             .ignoresSafeArea()) {
                             ZStack(alignment: .topTrailing) {
-                                Image(post.imageName)
-                                    .resizable()
-                                    .scaledToFill()
+                                PostImage(post: post)
                                     .frame(height: 380)
                                     .frame(maxWidth: .infinity)
                                     .containerRelativeFrame(.horizontal)
