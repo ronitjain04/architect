@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct PostView: View {
+    @EnvironmentObject var session: SessionStore
     @ObservedObject var post: Post
     @Environment(\.dismiss) private var dismiss
     @State private var showComments = false
@@ -43,17 +44,23 @@ struct PostView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        // Author row
+                        // Author row — tapping the author opens their profile.
                         HStack(spacing: 10) {
-                            Avatar(monogram: post.username, size: 34)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(post.username)
-                                    .font(AppFont.inter(13, .semibold))
-                                    .foregroundColor(.appText)
-                                Text(post.title)
-                                    .font(AppFont.inter(11, .regular))
-                                    .foregroundColor(.appTextSecondary)
+                            NavigationLink(destination: UserProfileView(username: post.username)) {
+                                HStack(spacing: 10) {
+                                    Avatar(monogram: post.username, size: 34)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(post.username)
+                                            .font(AppFont.inter(13, .semibold))
+                                            .foregroundColor(.appText)
+                                        Text(post.title)
+                                            .font(AppFont.inter(11, .regular))
+                                            .foregroundColor(.appTextSecondary)
+                                    }
+                                }
                             }
+                            .buttonStyle(.plain)
+
                             Spacer()
                             Button { showMenuSheet = true } label: {
                                 Image(systemName: "ellipsis")
@@ -106,11 +113,11 @@ struct PostView: View {
                             Spacer()
                             Button {
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                post.toggleSaved()
+                                session.toggleSaved(post.id)
                             } label: {
-                                Image(systemName: post.saved ? "bookmark.fill" : "bookmark")
+                                Image(systemName: session.isSaved(post.id) ? "bookmark.fill" : "bookmark")
                                     .foregroundColor(.appText)
-                                    .symbolEffect(.bounce, value: post.saved)
+                                    .symbolEffect(.bounce, value: session.isSaved(post.id))
                             }
                         }
                         .font(.system(size: 23, weight: .regular))

@@ -36,7 +36,6 @@ class Post: ObservableObject, Identifiable {
     let timeAgo: Date
     @Published var likes: Int
     @Published var user_liked: Bool
-    @Published var saved: Bool = false
     @Published var commentsModel: CommentViewModel
 
     // MARK: - Firestore
@@ -114,10 +113,6 @@ class Post: ObservableObject, Identifiable {
             : FieldValue.arrayRemove([uid])
         Firestore.firestore().collection("posts").document(docID)
             .updateData(["likedBy": update])
-    }
-
-    func toggleSaved() {
-        saved.toggle()
     }
 
     func addComment(text: String, publisher: String) {

@@ -1,17 +1,27 @@
+//
+//  ProfileView.swift
+//  ARchitect
+//
+//  The signed-in user's profile — Instagram-style: avatar, real stats
+//  (posts / followers / following), bio, and a grid of the user's actual
+//  posts plus a Saved tab backed by their bookmarks.
+//
+
 import SwiftUI
 
-/// The Profile tab — modelled on an Instagram profile. A header with avatar,
-/// project/follower stats, bio, and action buttons sits above a 3-column grid
-/// of the user's projects (the app's closest thing to a personal gallery).
 struct ProfileView: View {
     @EnvironmentObject var session: SessionStore
-    @State private var selectedSection: ProfileSection = .grid
-    @State private var selectedProject: Project? = nil
+    @State private var selectedSection: ProfileSection = .posts
     @State private var showEditProfile = false
     @State private var showARCamera = false
     @State private var showLogOutDialog = false
 
-    enum ProfileSection { case grid, locked, saved }
+    @State private var myPosts: [Post] = []
+    @State private var savedPosts: [Post] = []
+    @State private var followerCount = 0
+    @State private var isLoading = true
+
+    enum ProfileSection { case posts, saved }
 
     private var handle: String { session.profile?.username ?? "you" }
     private var displayName: String { session.profile?.displayName ?? "" }
@@ -20,33 +30,8 @@ struct ProfileView: View {
         return value.isEmpty ? "Add a bio in Edit profile" : value
     }
 
-    let projects = [
-        Project(name: "Minimalistic", tags: ["Minimalistic"], isLocked: true, image: "Minimalistic", modified: "August 23, 2022"),
-        Project(name: "Bedroom", tags: ["Modern", "Sunlit"], isLocked: false, image: "Bedroom", modified: "August 15, 2022"),
-        Project(name: "Office", tags: ["Old Gothic", "More"], isLocked: true, image: "Office", modified: "August 10, 2022"),
-        Project(name: "Living Room", tags: ["Modern", "Sunlit"], isLocked: false, image: "Living Room", modified: "August 05, 2022"),
-        Project(name: "Kitchen", tags: ["Modern"], isLocked: false, image: "Kitchen", modified: "July 28, 2022"),
-        Project(name: "Dining Room", tags: ["Modern"], isLocked: false, image: "Dining Room", modified: "July 25, 2022"),
-        Project(name: "Sunlit Bedroom", tags: ["Nature", "Cottage core"], isLocked: false, image: "Sunlit Bedroom", modified: "July 20, 2022"),
-        Project(name: "Cool Living Room", tags: ["Contemporary", "Colorful"], isLocked: true, image: "Cool Living Room", modified: "July 15, 2022")
-    ]
-
-    private let columns = [
-        GridItem(.flexible(), spacing: 2),
-        GridItem(.flexible(), spacing: 2),
-        GridItem(.flexible(), spacing: 2)
-    ]
-
-    private var visibleProjects: [Project] {
-        switch selectedSection {
-        case .grid:   return projects
-        case .locked: return projects.filter { $0.isLocked }
-        case .saved:  return projects.filter { $0.tags.contains("Minimalistic") || $0.name == "Bedroom" }
-        }
-    }
-
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             Color.appBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -59,13 +44,26 @@ struct ProfileView: View {
                     grid
                         .padding(.bottom, 90)
                 }
-            }
-
-            if let selectedProject {
-                projectPopup(for: selectedProject)
+                .refreshable { await reload() }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .task(id: session.profile?.username) { await reload() }
+        .onChange(of: session.savedPostIDs) {
+            Task { savedPosts = await SocialService.fetchPosts(ids: Array(session.savedPostIDs)) }
+        }
+    }
+
+    private func reload() async {
+        guard let username = session.profile?.username else { return }
+        isLoading = true
+        async let mine = SocialService.fetchPosts(byUsername: username)
+        async let saved = SocialService.fetchPosts(ids: Array(session.savedPostIDs))
+        async let followers = SocialService.followerCount(of: username)
+        myPosts = await mine
+        savedPosts = await saved
+        followerCount = await followers
+        isLoading = false
     }
 
     // MARK: Top bar
@@ -111,13 +109,13 @@ struct ProfileView: View {
                     Circle()
                         .strokeBorder(Color.appAccent, lineWidth: 2.5)
                         .frame(width: 88, height: 88)
-                    Avatar(monogram: "M", size: 78)
+                    Avatar(monogram: handle, size: 78)
                 }
 
                 HStack(spacing: 0) {
-                    stat(value: "\(projects.count)", label: "projects")
-                    stat(value: "142", label: "followers")
-                    stat(value: "98", label: "following")
+                    stat(value: "\(myPosts.count)", label: "posts")
+                    stat(value: "\(followerCount)", label: "followers")
+                    stat(value: "\(session.following.count)", label: "following")
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -168,8 +166,7 @@ struct ProfileView: View {
 
     private var sectionTabs: some View {
         HStack(spacing: 0) {
-            sectionTab(.grid, icon: "square.grid.3x3")
-            sectionTab(.locked, icon: "lock")
+            sectionTab(.posts, icon: "square.grid.3x3")
             sectionTab(.saved, icon: "bookmark")
         }
         .overlay(Rectangle().fill(Color.appDivider).frame(height: 0.5), alignment: .top)
@@ -196,84 +193,69 @@ struct ProfileView: View {
 
     // MARK: Grid
 
+    @ViewBuilder
     private var grid: some View {
-        LazyVGrid(columns: columns, spacing: 2) {
-            ForEach(visibleProjects, id: \.id) { project in
-                if project.isLocked {
-                    ProjectGridCell(project: project)
-                        .onTapGesture { withAnimation { selectedProject = project } }
-                } else {
-                    NavigationLink(destination: EditProjectView(project: project).navigationBarBackButtonHidden(true)) {
-                        ProjectGridCell(project: project)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+        let posts = selectedSection == .posts ? myPosts : savedPosts
+
+        if isLoading {
+            ProgressView()
+                .tint(.appPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+        } else if posts.isEmpty {
+            emptyState
+        } else {
+            PostGrid(posts: posts)
+                .padding(.top, 2)
         }
-        .padding(.top, 2)
     }
 
-    // MARK: Project popup
-
-    private func projectPopup(for project: Project) -> some View {
-        ZStack {
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-                .onTapGesture { withAnimation { selectedProject = nil } }
-
-            VStack(alignment: .leading, spacing: AppSpacing.md) {
-                HStack {
-                    Spacer()
-                    Button { withAnimation { selectedProject = nil } } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .resizable()
-                            .frame(width: 28, height: 28)
-                            .foregroundColor(.appTextSecondary)
-                    }
-                }
-
-                Image(project.image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 200)
-                    .frame(height: 160)
-                    .cornerRadius(AppRadius.md)
-                    .padding(.top, -12)
-
-                Text(project.name)
-                    .font(AppFont.title2)
-                    .foregroundColor(.appText)
-
-                Text("A modern dining chair with wooden legs and a grey seat. Looks great in any contemporary dining space.")
-                    .font(AppFont.subheadline)
-                    .foregroundColor(.appTextSecondary)
-                    .lineLimit(2)
-
-                Text("Modified: \(project.modified)")
-                    .font(AppFont.subheadline)
-                    .foregroundColor(.appTextSecondary)
-
-                NavigationLink(destination: ARCaptureView()) {
-                    Text("Open Project")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .padding(.top, AppSpacing.sm)
-
-                Button { withAnimation { selectedProject = nil } } label: {
-                    Text("Delete")
-                }
-                .buttonStyle(SecondaryButtonStyle())
-            }
-            .padding(AppSpacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                    .fill(Color.appBackground)
-            )
-            .frame(width: 320)
-            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-            .padding(.horizontal, AppSpacing.md)
+    private var emptyState: some View {
+        VStack(spacing: AppSpacing.sm) {
+            Image(systemName: selectedSection == .posts ? "camera" : "bookmark")
+                .font(.system(size: 36, weight: .light))
+                .foregroundColor(.appTextSecondary)
+            Text(selectedSection == .posts ? "No posts yet" : "No saved posts")
+                .font(AppFont.inter(16, .semibold))
+                .foregroundColor(.appText)
+            Text(selectedSection == .posts
+                 ? "Capture a space in AR to share your first one."
+                 : "Tap the bookmark on any post to save it here.")
+                .font(AppFont.inter(13, .regular))
+                .foregroundColor(.appTextSecondary)
+                .multilineTextAlignment(.center)
         }
-        .transition(.opacity)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 50)
+        .padding(.horizontal, AppSpacing.xl)
+    }
+}
+
+// MARK: - Shared post grid
+
+/// Three-column square grid of posts; cells open the post detail.
+struct PostGrid: View {
+    let posts: [Post]
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2)
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 2) {
+            ForEach(posts) { post in
+                NavigationLink(destination: PostView(post: post)) {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay(PostImage(post: post))
+                        .clipped()
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
 
@@ -344,46 +326,6 @@ struct CompactSecondaryButtonStyle: ButtonStyle {
                     .fill(Color.appSurfaceAlt)
             )
             .opacity(configuration.isPressed ? 0.8 : 1)
-    }
-}
-
-// MARK: - Square grid cell
-
-struct ProjectGridCell: View {
-    let project: Project
-
-    var body: some View {
-        Color.clear
-            .aspectRatio(1, contentMode: .fit)
-            .overlay(
-                Image(project.image)
-                    .resizable()
-                    .scaledToFill()
-            )
-            .overlay(alignment: .topTrailing) {
-                Image(systemName: project.isLocked ? "lock.fill" : "cube.transparent.fill")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(6)
-                    .shadow(color: .black.opacity(0.4), radius: 2)
-            }
-            .overlay(alignment: .bottomLeading) {
-                if let tag = project.tags.first {
-                    Text(tag)
-                        .font(AppFont.inter(9, .semibold))
-                        .padding(.vertical, 3)
-                        .padding(.horizontal, 7)
-                        .background(Color.appAccent)
-                        .foregroundColor(.white)
-                        .cornerRadius(AppRadius.sm)
-                        .padding(6)
-                }
-            }
-            .clipped()
-            // scaledToFill overflows the square; without an explicit content
-            // shape the overflow still hit-tests and taps bleed into
-            // neighboring cells.
-            .contentShape(Rectangle())
     }
 }
 

@@ -1,11 +1,16 @@
 import SwiftUI
 
-/// The Explore tab — an Instagram-style discovery screen for the furniture
-/// catalog: a search field, category filter pills, and a tight grid of items
-/// that open the AR try-out experience.
+/// The Explore tab — an Instagram-style discovery screen: search furniture
+/// (catalog grid) or people (accounts to follow), with category pills and a
+/// tight grid of items that open the product page.
 struct FurnitureExploreView: View {
+    @EnvironmentObject var session: SessionStore
     @State private var searchText: String = ""
     @State private var selectedCategory: String = "Chairs"
+    @State private var searchScope: SearchScope = .furniture
+    @State private var userResults: [UserProfile] = []
+
+    enum SearchScope { case furniture, people }
 
     private let categories: [(String, String)] = [
         ("Chairs", "chair.fill"),
@@ -39,9 +44,11 @@ struct FurnitureExploreView: View {
                 HStack(spacing: AppSpacing.sm) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.appTextSecondary)
-                    TextField("Search furniture", text: $searchText)
+                    TextField("Search furniture or people", text: $searchText)
                         .font(AppFont.body)
                         .foregroundColor(.appText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                     if !searchText.isEmpty {
                         Button { searchText = "" } label: {
                             Image(systemName: "xmark.circle.fill")
@@ -58,6 +65,105 @@ struct FurnitureExploreView: View {
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.vertical, AppSpacing.sm)
 
+                // Scope toggle appears while searching.
+                if !searchText.isEmpty {
+                    HStack(spacing: AppSpacing.sm) {
+                        scopePill("Furniture", scope: .furniture)
+                        scopePill("People", scope: .people)
+                        Spacer()
+                    }
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.bottom, AppSpacing.sm)
+                }
+
+                if !searchText.isEmpty && searchScope == .people {
+                    peopleResults
+                } else {
+                    furnitureBrowser
+                }
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .task(id: "\(searchText)|\(searchScope == .people)") {
+            guard searchScope == .people, !searchText.isEmpty else { return }
+            // Small debounce so we don't query per keystroke.
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            userResults = await SocialService.searchUsers(prefix: searchText)
+        }
+    }
+
+    private func scopePill(_ label: String, scope: SearchScope) -> some View {
+        let isSelected = searchScope == scope
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) { searchScope = scope }
+        } label: {
+            Text(label)
+                .font(AppFont.inter(13, .semibold))
+                .foregroundColor(isSelected ? .appOnPrimary : .appPrimary)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 14)
+                .background(Capsule().fill(isSelected ? Color.appPrimary : Color.appSurfaceAlt))
+        }
+    }
+
+    // MARK: People results
+
+    private var peopleResults: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                if userResults.isEmpty {
+                    VStack(spacing: AppSpacing.sm) {
+                        Image(systemName: "person.crop.circle.badge.questionmark")
+                            .font(.system(size: 36, weight: .light))
+                            .foregroundColor(.appTextSecondary)
+                        Text("No people found")
+                            .font(AppFont.inter(15, .semibold))
+                            .foregroundColor(.appText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 60)
+                } else {
+                    ForEach(userResults, id: \.username) { user in
+                        NavigationLink(destination: UserProfileView(username: user.username)) {
+                            HStack(spacing: AppSpacing.md) {
+                                Avatar(monogram: user.username, size: 44)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(user.username)
+                                        .font(AppFont.inter(14, .semibold))
+                                        .foregroundColor(.appText)
+                                    if !user.displayName.isEmpty {
+                                        Text(user.displayName)
+                                            .font(AppFont.inter(12, .regular))
+                                            .foregroundColor(.appTextSecondary)
+                                    }
+                                }
+
+                                Spacer()
+
+                                if user.username != session.profile?.username {
+                                    FollowButton(username: user.username)
+                                        .frame(width: 100)
+                                }
+                            }
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.bottom, 90)
+        }
+        .scrollDismissesKeyboard(.immediately)
+    }
+
+    // MARK: Furniture browser
+
+    private var furnitureBrowser: some View {
+        VStack(spacing: 0) {
                 // Category pills
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: AppSpacing.sm) {
@@ -99,9 +205,7 @@ struct FurnitureExploreView: View {
                     .padding(.bottom, 90)
                 }
                 .scrollDismissesKeyboard(.immediately)
-            }
         }
-        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
@@ -141,5 +245,6 @@ struct ExploreCell: View {
 struct FurnitureExploreView_Previews: PreviewProvider {
     static var previews: some View {
         FurnitureExploreView()
+            .environmentObject(SessionStore())
     }
 }

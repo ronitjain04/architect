@@ -24,6 +24,11 @@ final class SessionStore: ObservableObject {
     @Published private(set) var user: FirebaseAuth.User?
     @Published private(set) var profile: UserProfile?
 
+    /// Post document IDs the user has bookmarked.
+    @Published private(set) var savedPostIDs: Set<String> = []
+    /// Usernames the user follows.
+    @Published private(set) var following: Set<String> = []
+
     var isAuthenticated: Bool { user != nil }
 
     private var authHandle: AuthStateDidChangeListenerHandle?
@@ -39,6 +44,8 @@ final class SessionStore: ObservableObject {
                     await self.loadOrCreateProfile(for: user)
                 } else {
                     self.profile = nil
+                    self.savedPostIDs = []
+                    self.following = []
                 }
             }
         }
@@ -78,6 +85,41 @@ final class SessionStore: ObservableObject {
         try? Auth.auth().signOut()
     }
 
+    // MARK: - Saved posts & following
+
+    func isSaved(_ postID: String) -> Bool {
+        savedPostIDs.contains(postID)
+    }
+
+    func toggleSaved(_ postID: String) {
+        if savedPostIDs.contains(postID) {
+            savedPostIDs.remove(postID)
+        } else {
+            savedPostIDs.insert(postID)
+        }
+        persistOwnDoc(["savedPosts": Array(savedPostIDs)])
+    }
+
+    func isFollowing(_ username: String) -> Bool {
+        following.contains(username)
+    }
+
+    func toggleFollow(_ username: String) {
+        guard username != profile?.username else { return }
+        if following.contains(username) {
+            following.remove(username)
+        } else {
+            following.insert(username)
+        }
+        persistOwnDoc(["following": Array(following)])
+    }
+
+    private func persistOwnDoc(_ fields: [String: Any]) {
+        guard let uid = user?.uid else { return }
+        Firestore.firestore().collection("users").document(uid)
+            .setData(fields, merge: true)
+    }
+
     // MARK: - Profile document
 
     func updateProfile(displayName: String, bio: String) async {
@@ -99,6 +141,8 @@ final class SessionStore: ObservableObject {
                 displayName: data["displayName"] as? String ?? "",
                 bio: data["bio"] as? String ?? ""
             )
+            savedPostIDs = Set(data["savedPosts"] as? [String] ?? [])
+            following = Set(data["following"] as? [String] ?? [])
             return
         }
 
