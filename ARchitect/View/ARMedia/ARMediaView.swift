@@ -200,7 +200,7 @@ struct FeedPostCard: View {
             HStack(spacing: 18) {
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    post.toggleLike()
+                    post.toggleLike(actorUsername: session.profile?.username ?? "")
                 } label: {
                     Image(systemName: post.user_liked ? "heart.fill" : "heart")
                         .foregroundColor(post.user_liked ? .appLike : .appText)
@@ -277,7 +277,7 @@ struct FeedPostCard: View {
     private func doubleTapLike() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         if !post.user_liked {
-            post.toggleLike()
+            post.toggleLike(actorUsername: session.profile?.username ?? "")
         }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             showHeartBurst = true

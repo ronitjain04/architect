@@ -103,7 +103,7 @@ class Post: ObservableObject, Identifiable {
     // MARK: - Actions
 
     /// Optimistic local flip; persists to the post document when remote.
-    func toggleLike() {
+    func toggleLike(actorUsername: String) {
         if user_liked {
             likes = max(likes - 1, 0)
         } else {
@@ -117,6 +117,22 @@ class Post: ObservableObject, Identifiable {
             : FieldValue.arrayRemove([uid])
         Firestore.firestore().collection("posts").document(docID)
             .updateData(["likedBy": update])
+
+        guard !actorUsername.isEmpty else { return }
+        if user_liked {
+            NotificationService.writeLike(
+                recipientUid: authorUid,
+                actorUid: uid,
+                actorUsername: actorUsername,
+                postID: docID
+            )
+        } else {
+            NotificationService.deleteLike(
+                recipientUid: authorUid,
+                actorUsername: actorUsername,
+                postID: docID
+            )
+        }
     }
 
     func addComment(text: String, publisher: String) {
