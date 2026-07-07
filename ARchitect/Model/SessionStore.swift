@@ -17,6 +17,7 @@ struct UserProfile {
     var username: String
     var displayName: String
     var bio: String
+    var uid: String
 }
 
 @MainActor
@@ -61,7 +62,7 @@ final class SessionStore: ObservableObject {
 
     func signUp(username: String, email: String, password: String) async throws {
         let result = try await Auth.auth().createUser(withEmail: email, password: password)
-        let profile = UserProfile(username: username, displayName: username, bio: "")
+        let profile = UserProfile(username: username, displayName: username, bio: "", uid: result.user.uid)
         try await Firestore.firestore().collection("users").document(result.user.uid).setData([
             "username": profile.username,
             "displayName": profile.displayName,
@@ -147,7 +148,8 @@ final class SessionStore: ObservableObject {
             profile = UserProfile(
                 username: data["username"] as? String ?? "user",
                 displayName: data["displayName"] as? String ?? "",
-                bio: data["bio"] as? String ?? ""
+                bio: data["bio"] as? String ?? "",
+                uid: user.uid
             )
             savedPostIDs = Set(data["savedPosts"] as? [String] ?? [])
             following = Set(data["following"] as? [String] ?? [])
@@ -160,7 +162,8 @@ final class SessionStore: ObservableObject {
         let starter = UserProfile(
             username: username,
             displayName: user.displayName ?? username,
-            bio: ""
+            bio: "",
+            uid: user.uid
         )
         try? await ref.setData([
             "username": starter.username,

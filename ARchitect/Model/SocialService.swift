@@ -32,7 +32,8 @@ enum SocialService {
             profile: UserProfile(
                 username: data["username"] as? String ?? username,
                 displayName: data["displayName"] as? String ?? "",
-                bio: data["bio"] as? String ?? ""
+                bio: data["bio"] as? String ?? "",
+                uid: document.documentID
             ),
             followingCount: (data["following"] as? [String])?.count ?? 0,
             uid: document.documentID
@@ -90,7 +91,8 @@ enum SocialService {
             return UserProfile(
                 username: data["username"] as? String ?? "",
                 displayName: data["displayName"] as? String ?? "",
-                bio: data["bio"] as? String ?? ""
+                bio: data["bio"] as? String ?? "",
+                uid: doc.documentID
             )
         }
     }
