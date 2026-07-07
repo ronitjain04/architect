@@ -57,7 +57,7 @@ class Post: ObservableObject, Identifiable {
         self.likes = likedBy.count
         self.user_liked = Auth.auth().currentUser.map { likedBy.contains($0.uid) } ?? false
         self.commentCount = data["commentCount"] as? Int ?? 0
-        self.commentsModel = CommentViewModel(postDocID: docID)
+        self.commentsModel = CommentViewModel(postDocID: docID, postAuthorUid: self.authorUid)
     }
 
     /// Denormalized comment count from the post document; the live list loads
