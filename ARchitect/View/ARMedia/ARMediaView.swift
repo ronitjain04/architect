@@ -10,6 +10,7 @@
 import SwiftUI
 
 struct ARMediaView: View {
+    @EnvironmentObject var session: SessionStore
     @StateObject private var feed = FeedStore()
     @State private var storyPost: Post? = nil
     @State private var showStoryPost = false
@@ -57,7 +58,15 @@ struct ARMediaView: View {
         // This view supplies its own header, so hide the native nav bar to
         // avoid a duplicate empty bar above it.
         .toolbar(.hidden, for: .navigationBar)
-        .task { feed.start() }
+        // Security rules require a signed-in user, and a listener attached
+        // pre-auth stays denied — so (re)attach whenever auth flips on.
+        .task(id: session.isAuthenticated) {
+            if session.isAuthenticated {
+                feed.restart()
+            } else {
+                feed.stopListening()
+            }
+        }
     }
 
     private var emptyFeed: some View {
@@ -136,6 +145,7 @@ struct ARMediaView: View {
 
 #Preview {
     ARMediaView()
+        .environmentObject(SessionStore())
 }
 
 // MARK: - Post image

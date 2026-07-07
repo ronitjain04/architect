@@ -9,6 +9,7 @@
 
 import Foundation
 import UIKit
+import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
 
@@ -47,6 +48,22 @@ final class FeedStore: ObservableObject {
             }
     }
 
+    /// Detach the current listener and attach a fresh one. Needed after auth
+    /// changes: a listener that attached before sign-in is permanently denied
+    /// once security rules require a signed-in user.
+    func restart() {
+        listener?.remove()
+        listener = nil
+        isLoading = true
+        start()
+    }
+
+    func stopListening() {
+        listener?.remove()
+        listener = nil
+        posts = []
+    }
+
     deinit {
         listener?.remove()
     }
@@ -55,7 +72,14 @@ final class FeedStore: ObservableObject {
 
     enum CreatePostError: LocalizedError {
         case imageEncoding
-        var errorDescription: String? { "Couldn't encode the captured image." }
+        case notSignedIn
+
+        var errorDescription: String? {
+            switch self {
+            case .imageEncoding: return "Couldn't encode the captured image."
+            case .notSignedIn: return "You need to be signed in to share a post."
+            }
+        }
     }
 
     /// Creates the post document with the capture embedded as a compressed
@@ -72,9 +96,13 @@ final class FeedStore: ObservableObject {
         furniture: [String],
         username: String
     ) async throws {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            throw CreatePostError.notSignedIn
+        }
         let data = try compressedImageData(from: image)
 
         try await Firestore.firestore().collection("posts").addDocument(data: [
+            "authorUid": uid,
             "username": username,
             "title": title,
             "description": description,
@@ -121,8 +149,10 @@ final class FeedStore: ObservableObject {
         ]
 
         let db = Firestore.firestore()
+        let seederUid = Auth.auth().currentUser?.uid ?? "seed"
         for sample in samples {
             db.collection("posts").addDocument(data: [
+                "authorUid": seederUid,
                 "username": sample.username,
                 "title": sample.title,
                 "description": sample.description,

@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
 
@@ -67,6 +68,7 @@ class CommentViewModel: ObservableObject {
         if let postDocID, FirebaseApp.app() != nil {
             let post = Firestore.firestore().collection("posts").document(postDocID)
             post.collection("comments").addDocument(data: [
+                "authorUid": Auth.auth().currentUser?.uid ?? "",
                 "text": text,
                 "publisher": publisher,
                 "timestamp": FieldValue.serverTimestamp(),
