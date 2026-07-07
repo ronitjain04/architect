@@ -68,6 +68,14 @@ enum SocialService {
         return posts.sorted { $0.timeAgo > $1.timeAgo }
     }
 
+    /// A single post by document ID — used by the activity feed to jump to
+    /// the post behind a like/comment notification.
+    static func fetchPost(id: String) async -> Post? {
+        guard let snapshot = try? await Firestore.firestore().collection("posts").document(id).getDocument(),
+              snapshot.exists, let data = snapshot.data() else { return nil }
+        return Post(docID: snapshot.documentID, data: data)
+    }
+
     /// How many users follow this username (server-side aggregate).
     static func followerCount(of username: String) async -> Int {
         let query = Firestore.firestore().collection("users")
