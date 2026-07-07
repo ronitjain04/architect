@@ -1,12 +1,20 @@
 import SwiftUI
 
-struct ProjectsView: View {
-    @State private var selectedFilter: String = "All Projects"
-    @State private var isSearchActive: Bool = false
-    @State private var searchQuery: String = ""
-    @State private var isKeyboardVisible: Bool = false
+/// The Profile tab — modelled on an Instagram profile. A header with avatar,
+/// project/follower stats, bio, and action buttons sits above a 3-column grid
+/// of the user's projects (the app's closest thing to a personal gallery).
+struct ProfileView: View {
+    @State private var selectedSection: ProfileSection = .grid
     @State private var selectedProject: Project? = nil
-    
+    @State private var showEditProfile = false
+    @State private var showARCamera = false
+
+    enum ProfileSection { case grid, locked, saved }
+
+    let handle = "myhome"
+    @State private var displayName = "My Home Studio"
+    @State private var bio = "Interior designer · AR spaces\nMinimalist + sunlit rooms"
+
     let projects = [
         Project(name: "Minimalistic", tags: ["Minimalistic"], isLocked: true, image: "Minimalistic", modified: "August 23, 2022"),
         Project(name: "Bedroom", tags: ["Modern", "Sunlit"], isLocked: false, image: "Bedroom", modified: "August 15, 2022"),
@@ -17,297 +25,344 @@ struct ProjectsView: View {
         Project(name: "Sunlit Bedroom", tags: ["Nature", "Cottage core"], isLocked: false, image: "Sunlit Bedroom", modified: "July 20, 2022"),
         Project(name: "Cool Living Room", tags: ["Contemporary", "Colorful"], isLocked: true, image: "Cool Living Room", modified: "July 15, 2022")
     ]
-    
-    let sampleRelatedItems: [(String, String)] = [
-        ("Rond table", "rondTableImage"),
-        ("Chaich", "chaichImage"),
-        ("Parson Chair", "parsonChairImage")
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2)
     ]
-    
-    let projectFilters = ["All Projects", "Favorites", "A-Z", "Private", "Public"]
-    
-    private func leftColumnProjects() -> [Project] {
-        let filtered = filteredProjects()
-        return stride(from: 0, to: filtered.count, by: 2).map { filtered[$0] }
+
+    private var visibleProjects: [Project] {
+        switch selectedSection {
+        case .grid:   return projects
+        case .locked: return projects.filter { $0.isLocked }
+        case .saved:  return projects.filter { $0.tags.contains("Minimalistic") || $0.name == "Bedroom" }
+        }
     }
 
-    private func rightColumnProjects() -> [Project] {
-        let filtered = filteredProjects()
-        return stride(from: 1, to: filtered.count, by: 2).map { filtered[$0] }
-    }
-    
     var body: some View {
-        // No NavigationStack here — the root stack is owned by RootTabView.
-        Group {
-            ZStack(alignment: .bottom) {
-                Color(red: 255/255, green: 242/255, blue: 223/255)
-                    .ignoresSafeArea()
-                
-                VStack(spacing: 0) {
-                    
-                    // Recent Section & Filters
-                    ScrollView {
-                        // "Recent" section label
-                        HStack {
-                            Text("Recent")
-                                .font(.title3)
-                                .fontWeight(.medium)
-                                .foregroundColor(Color(red: 99/255, green: 83/255, blue: 70/255))
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                        
-                        // Horizontal scroll of sample projects
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 15) {
-                                ForEach(projects.prefix(3), id: \.id) { project in
-                                    if project.isLocked {
-                                        ProjectCard(project: project)
-                                            .onTapGesture {
-                                                withAnimation {
-                                                    selectedProject = project
-                                                }
-                                            }
-                                    } else {
-                                        NavigationLink(destination: EditProjectView(project: project).navigationBarBackButtonHidden(true)) {
-                                            ProjectCard(project: project)
-                                                .frame(width: 123, height: 212)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                    }
-                                }.padding(.horizontal)
-                            }
-                        }
-                        
-                        // Filters row
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 16) {
-                                ForEach(projectFilters, id: \.self) { filter in
-                                    Button(action: {
-                                        selectedFilter = filter
-                                    }) {
-                                        Text(filter)
-                                            .font(.subheadline)
-                                            .fontWeight(selectedFilter == filter ? .bold : .regular)
-                                            .foregroundColor(Color(red: 99/255, green: 83/255, blue: 70/255))
-                                            .padding(.vertical, 4)
-                                            .padding(.horizontal, 10)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color(red: 236/255, green: 216/255, blue: 189/255))
-                                            )
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(Color.gray.opacity(0.2), lineWidth: selectedFilter == filter ? 0 : 1)
-                                            )
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                        .padding(.top, 12)
-                        
-                        // Main grid of projects after filtering and search query
-                        // Split the projects into two vertical columns
-                        HStack(alignment: .top, spacing: 12) {
-                            LazyVStack(spacing: 16) {
-                                ForEach(leftColumnProjects(), id: \.id) { project in
-                                    ProjectCard(project: project)
-                                }
-                            }
+        ZStack(alignment: .bottom) {
+            Color.appBackground.ignoresSafeArea()
 
-                            LazyVStack(spacing: 16) {
-                                ForEach(rightColumnProjects(), id: \.id) { project in
-                                    ProjectCard(project: project)
-                                }
-                            }
-                        }
-                        .padding([.horizontal, .bottom])
-                        .padding(.top, 4)
-                    }
+            VStack(spacing: 0) {
+                topBar
+                Divider().background(Color.appDivider)
+
+                ScrollView {
+                    profileHeader
+                    sectionTabs
+                    grid
+                        .padding(.bottom, 90)
                 }
-                
-                //            if !isKeyboardVisible {
-                //                BottomNavigationBar()
-                //            }
-                
-                // Black popup overlay when a project is selected.
-                if let selectedProject = selectedProject {
-                    ZStack {
-                        Color.black.opacity(0.5)
-                            .ignoresSafeArea()
-                            .onTapGesture {
-                                withAnimation {
-                                    self.selectedProject = nil
-                                }
-                            }
-                        
-                        // Popup Card resembling your design
-                        VStack(alignment: .leading, spacing: 16) {
-                            HStack {
-                                Spacer()
-                                Button {
-                                    withAnimation {
-                                        self.selectedProject = nil
-                                    }
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .resizable()
-                                        .frame(width: 28, height: 28)
-                                        .foregroundColor(Color.gray.opacity(0.6))
-                                }
-                            }
-                            
-                            Image(selectedProject.image)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxWidth: 200)
-                                .frame(height: 160)
-                                .cornerRadius(12)
-                                .padding(.top, -12)
-                            
-                            Text(selectedProject.name)
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
-                            
-                            Text("A modern dining chair with wooden legs and a grey seat. Looks great in any contemporary dining space.")
-                                .font(.subheadline)
-                                .foregroundColor(.black.opacity(0.8))
-                                .lineLimit(2)
-                            
-                            Text("Modified: \(selectedProject.modified)")
-                                .font(.subheadline)
-                                .foregroundColor(.black.opacity(0.8))
-                            
-                            NavigationLink(destination: ARViewControllerWrapper().navigationBarBackButtonHidden(true)) {
-                                Text("Open Project")
-                                    .foregroundColor(Color(red: 99/255, green: 83/255, blue: 70/255))
-                                    .fontWeight(.bold)
-                                    .padding(.vertical, 12)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.white)
-                                    .cornerRadius(12)
-                            }
-                            .padding(.top, 8)
+            }
 
-                            Button {
-                                withAnimation {
-                                    self.selectedProject = nil
-                                }
-                            } label: {
-                                Text("Delete")
-                                    .foregroundColor(.white)
-                                    .fontWeight(.bold)
-                                    .padding(.vertical, 12)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color(red: 99/255, green: 83/255, blue: 70/255))
-                                    .cornerRadius(12)
-                            }
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color(red: 255/255, green: 242/255, blue: 223/255))
-                        )
-                        .frame(width: 320)
-                        .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-                        .padding(.horizontal, 16)
+            if let selectedProject {
+                projectPopup(for: selectedProject)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    // MARK: Top bar
+
+    private var topBar: some View {
+        HStack(spacing: 6) {
+            Text(handle)
+                .font(AppFont.inter(18, .semibold))
+                .foregroundColor(.appText)
+            Spacer()
+            // Capture a new space in AR.
+            Button { showARCamera = true } label: {
+                Image(systemName: "plus.app")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundColor(.appText)
+            }
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.vertical, 10)
+        .fullScreenCover(isPresented: $showARCamera) {
+            ARViewControllerWrapper()
+                .ignoresSafeArea()
+        }
+    }
+
+    // MARK: Header
+
+    private var profileHeader: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            HStack(spacing: AppSpacing.lg) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(Color.appAccent, lineWidth: 2.5)
+                        .frame(width: 88, height: 88)
+                    Avatar(monogram: "M", size: 78)
+                }
+
+                HStack(spacing: 0) {
+                    stat(value: "\(projects.count)", label: "projects")
+                    stat(value: "142", label: "followers")
+                    stat(value: "98", label: "following")
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayName)
+                    .font(AppFont.inter(14, .semibold))
+                    .foregroundColor(.appText)
+                Text(bio)
+                    .font(AppFont.inter(13, .regular))
+                    .foregroundColor(.appText)
+            }
+
+            HStack(spacing: AppSpacing.sm) {
+                Button { showEditProfile = true } label: { Text("Edit profile") }
+                    .buttonStyle(CompactSecondaryButtonStyle())
+                ShareLink(item: "Check out my ARchitect profile — @\(handle)") {
+                    Text("Share profile")
+                }
+                .buttonStyle(CompactSecondaryButtonStyle())
+            }
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.top, AppSpacing.md)
+        .padding(.bottom, AppSpacing.md)
+        .sheet(isPresented: $showEditProfile) {
+            EditProfileSheet(displayName: $displayName, bio: $bio)
+        }
+    }
+
+    private func stat(value: String, label: String) -> some View {
+        VStack(spacing: 1) {
+            Text(value)
+                .font(AppFont.inter(17, .semibold))
+                .foregroundColor(.appText)
+            Text(label)
+                .font(AppFont.inter(12, .regular))
+                .foregroundColor(.appTextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Section tabs
+
+    private var sectionTabs: some View {
+        HStack(spacing: 0) {
+            sectionTab(.grid, icon: "square.grid.3x3")
+            sectionTab(.locked, icon: "lock")
+            sectionTab(.saved, icon: "bookmark")
+        }
+        .overlay(Rectangle().fill(Color.appDivider).frame(height: 0.5), alignment: .top)
+    }
+
+    private func sectionTab(_ section: ProfileSection, icon: String) -> some View {
+        let isSelected = selectedSection == section
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) { selectedSection = section }
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
+                .foregroundColor(isSelected ? .appText : .appTextSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .overlay(
+                    Rectangle()
+                        .fill(isSelected ? Color.appText : Color.clear)
+                        .frame(height: 1.5),
+                    alignment: .bottom
+                )
+        }
+    }
+
+    // MARK: Grid
+
+    private var grid: some View {
+        LazyVGrid(columns: columns, spacing: 2) {
+            ForEach(visibleProjects, id: \.id) { project in
+                if project.isLocked {
+                    ProjectGridCell(project: project)
+                        .onTapGesture { withAnimation { selectedProject = project } }
+                } else {
+                    NavigationLink(destination: EditProjectView(project: project).navigationBarBackButtonHidden(true)) {
+                        ProjectGridCell(project: project)
                     }
-                    .transition(.opacity)
+                    .buttonStyle(.plain)
                 }
             }
         }
+        .padding(.top, 2)
     }
-    
-    // MARK: - Filter Logic
-    private func filteredProjects() -> [Project] {
-        var result = projects
-        if !searchQuery.isEmpty {
-            result = result.filter { project in
-                project.name.lowercased().contains(searchQuery.lowercased())
-            }
-        }
-        if selectedFilter == "Favorites" {
-            result = result.filter { $0.name.contains("Minimalistic") || $0.tags.contains("Minimalistic") }
-        } else if selectedFilter == "A-Z" {
-            result.sort { $0.name < $1.name }
-        } else if selectedFilter == "Private" {
-            result = result.filter { $0.isLocked }
-        } else if selectedFilter == "Public" {
-            result = result.filter { !$0.isLocked }
-        }
-        return result
-    }
-}
 
-// MARK: - Card for Projects
-struct ProjectCard: View {
-    var project: Project
-    
-    var body: some View {
+    // MARK: Project popup
+
+    private func projectPopup(for project: Project) -> some View {
         ZStack {
-            Image(project.image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 173, height: 188) // 🔒 Lock the image to card size
-                .clipped()
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture { withAnimation { selectedProject = nil } }
 
-            LinearGradient(
-                gradient: Gradient(colors: [Color.black.opacity(0.6), Color.clear]),
-                startPoint: .bottom,
-                endPoint: .center
-            )
-            .cornerRadius(12)
-
-            if project.isLocked {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding([.top, .trailing], 4)
-            } else {
-                Image(systemName: "lock.open.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding([.top, .trailing], 4)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppSpacing.md) {
                 HStack {
-                    ForEach(project.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: 8))
-                            .fontWeight(.bold)
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 8)
-                            .background(Color(red: 206/255, green: 135/255, blue: 35/255))
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                            .lineLimit(1)
+                    Spacer()
+                    Button { withAnimation { selectedProject = nil } } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .resizable()
+                            .frame(width: 28, height: 28)
+                            .foregroundColor(.appTextSecondary)
                     }
                 }
+
+                Image(project.image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 200)
+                    .frame(height: 160)
+                    .cornerRadius(AppRadius.md)
+                    .padding(.top, -12)
+
                 Text(project.name)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .lineLimit(1)
+                    .font(AppFont.title2)
+                    .foregroundColor(.appText)
+
+                Text("A modern dining chair with wooden legs and a grey seat. Looks great in any contemporary dining space.")
+                    .font(AppFont.subheadline)
+                    .foregroundColor(.appTextSecondary)
+                    .lineLimit(2)
+
+                Text("Modified: \(project.modified)")
+                    .font(AppFont.subheadline)
+                    .foregroundColor(.appTextSecondary)
+
+                NavigationLink(destination: ARViewControllerWrapper().navigationBarBackButtonHidden(true)) {
+                    Text("Open Project")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.top, AppSpacing.sm)
+
+                Button { withAnimation { selectedProject = nil } } label: {
+                    Text("Delete")
+                }
+                .buttonStyle(SecondaryButtonStyle())
             }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .padding(AppSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .fill(Color.appBackground)
+            )
+            .frame(width: 320)
+            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+            .padding(.horizontal, AppSpacing.md)
         }
-        .frame(width: 173, height: 188) // 💡 Apply fixed frame here to contain it all
-        .cornerRadius(12)
-        .clipped() // 🛡 Prevents image overflow
+        .transition(.opacity)
     }
 }
 
+/// Edits the local profile fields — persists to the user's document once
+/// accounts are backed by Firebase.
+struct EditProfileSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var displayName: String
+    @Binding var bio: String
 
-struct ProjectsView_Previews: PreviewProvider {
+    var body: some View {
+        VStack(spacing: AppSpacing.md) {
+            Text("Edit profile")
+                .font(AppFont.inter(15, .semibold))
+                .foregroundColor(.appText)
+                .padding(.top, AppSpacing.md)
+
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                Text("Name")
+                    .font(AppFont.inter(13, .semibold))
+                    .foregroundColor(.appTextSecondary)
+                AuthField(placeholder: "Name", text: $displayName)
+            }
+
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                Text("Bio")
+                    .font(AppFont.inter(13, .semibold))
+                    .foregroundColor(.appTextSecondary)
+                TextField("Bio", text: $bio, axis: .vertical)
+                    .lineLimit(2...4)
+                    .font(AppFont.body)
+                    .foregroundColor(.appText)
+                    .padding(AppSpacing.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                            .fill(Color.appSurfaceAlt)
+                    )
+            }
+
+            Button("Done") { dismiss() }
+                .buttonStyle(PrimaryButtonStyle())
+
+            Spacer()
+        }
+        .padding(.horizontal, AppSpacing.lg)
+        .presentationDetents([.height(380)])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Color.appBackground)
+    }
+}
+
+/// Quiet, compact tan button used for the profile's "Edit profile" / "Share".
+struct CompactSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(AppFont.inter(13, .semibold))
+            .foregroundColor(.appText)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                    .fill(Color.appSurfaceAlt)
+            )
+            .opacity(configuration.isPressed ? 0.8 : 1)
+    }
+}
+
+// MARK: - Square grid cell
+
+struct ProjectGridCell: View {
+    let project: Project
+
+    var body: some View {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay(
+                Image(project.image)
+                    .resizable()
+                    .scaledToFill()
+            )
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: project.isLocked ? "lock.fill" : "cube.transparent.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(6)
+                    .shadow(color: .black.opacity(0.4), radius: 2)
+            }
+            .overlay(alignment: .bottomLeading) {
+                if let tag = project.tags.first {
+                    Text(tag)
+                        .font(AppFont.inter(9, .semibold))
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 7)
+                        .background(Color.appAccent)
+                        .foregroundColor(.white)
+                        .cornerRadius(AppRadius.sm)
+                        .padding(6)
+                }
+            }
+            .clipped()
+            // scaledToFill overflows the square; without an explicit content
+            // shape the overflow still hit-tests and taps bleed into
+            // neighboring cells.
+            .contentShape(Rectangle())
+    }
+}
+
+struct ProfileView_Previews: PreviewProvider {
     static var previews: some View {
-        GeneralView()
+        ProfileView()
     }
 }

@@ -2,15 +2,19 @@
 //  ARMediaView.swift
 //  ARchitect
 //
-//  Created by Songyuan Liu on 2/4/25.
+//  The social feed — redesigned as an Instagram-style timeline: a wordmark
+//  header, a stories rail, and full-bleed post cards with the familiar
+//  like / comment / share / save action bar.
 //
 
 import SwiftUI
 
 struct ARMediaView: View {
     @State var posts: [Post]
-    //@State private var showSettings = false
-    
+    @State private var storyPost: Post? = nil
+    @State private var showStoryPost = false
+    @State private var showARCamera = false
+
     init() {
         //Firebase call gets all posts
         posts = [
@@ -28,18 +32,18 @@ struct ARMediaView: View {
                 imageName: "ar_room2", // Replace with actual asset name
                 description: "Bold interior design project that revives the vibrant energy of the early '80s. It marries vivid color schemes, geometric patterns, and nostalgic accents with contemporary comforts.",
                 likes: 28),
-            
+
             Post(
                 username: "Sam",
                 imageName: "ar_room3", // Replace with actual asset name
                 description: "My own room with amazing lighting and furniture. Explore how I have transfomed my space"),
-            
+
             Post(
                 username: "Paul",
                 imageName: "ar_room4", // Replace with actual asset name
                 description: "Bold interior design project that revives the vibrant energy of the early '80s. It marries vivid color schemes, geometric patterns, and nostalgic accents with contemporary comforts."),
             Post(imageName: "ar_room5"),
-            
+
             Post(
                 username: "Steven",
                 imageName: "ar_room6", // Replace with actual asset name
@@ -47,69 +51,31 @@ struct ARMediaView: View {
             Post(imageName: "ar_room7")
         ]
     }
-    
+
     var body: some View {
-        // No NavigationStack / BottomNavigationBar here — both are owned by
-        // RootTabView so tab switching no longer pushes onto the stack.
-        Group {
-            ZStack (alignment: .bottom){
-                Color(.sRGB,red: 249/255, green: 237/255, blue: 215/255)
-                    .ignoresSafeArea()
-                VStack {
-                    // Top Bar
-                    HStack {
-                        HStack(spacing: 15) {
-                            Image(systemName: "person.circle.fill")
-                                .resizable()
-                                .frame(width: 50, height: 50)
-                            
-                            Text("ARchitect")
-                                .font(.title)
-                                .fontWeight(.bold)
-                                .foregroundColor(Color(red: 102/255, green: 82/255, blue: 56/255))
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                feedHeader
+
+                Divider().background(Color.appDivider)
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        storiesRail
+
+                        Divider().background(Color.appDivider)
+
+                        ForEach(posts) { post in
+                            FeedPostCard(post: post)
                         }
-                        
-                        Spacer()
-//                        
-//                        Button(action: {
-//                            showSettings.toggle()
-//                        }) {
-//                            Image(systemName: "line.3.horizontal")
-//                                .resizable()
-//                                .frame(width: 20, height: 15)
-//                                .padding(6)
-//                                .foregroundColor(.black)
-//                        }
-//                        .sheet(isPresented: $showSettings) {
-//                            Text("Settings go here")
-//                                .font(.title)
-//                                .padding()
-//                        }
-                        
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-                    
-                    Divider()
-                        .background(Color.gray)
-                        .frame(maxWidth: .infinity)
-                    
-                    ScrollView {
-                        VStack(spacing: 20) {
-                            ForEach(posts) { post in
-//                                if let binding = bindingForPost(id: post.id) {
-                                    NavigationLink(destination: PostView(post: post)) {
-                                        SubARView(post: post)
-                                    }
-//                                }
-                                
-                                Divider()
-                                    .background(Color.gray)
-                                    .frame(maxWidth: .infinity)
-                            }
-                        }
-                        .padding(.bottom, 20)
-                    }
+                    .padding(.bottom, 90) // clear the floating tab bar
+                }
+                .refreshable {
+                    // Placeholder until the feed loads from Firebase.
+                    try? await Task.sleep(nanoseconds: 600_000_000)
                 }
             }
         }
@@ -118,114 +84,220 @@ struct ARMediaView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-//    private func bindingForPost(id: UUID) -> Binding<Post>? {
-//        guard let index = posts.firstIndex(where: { $0.id == id}) else { return nil}
-//        return $posts[index]
-//    }
-    
+    private var feedHeader: some View {
+        HStack {
+            Text("ARchitect")
+                .font(AppFont.fraunces(26, .semibold))
+                .foregroundColor(.appText)
+
+            Spacer()
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.vertical, 10)
+    }
+
+    private var storiesRail: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AppSpacing.md) {
+                // "Your AR" opens the AR camera to capture a new space.
+                Button { showARCamera = true } label: {
+                    StoryRing(systemImage: "plus", label: "Your AR", isAdd: true)
+                }
+                .buttonStyle(.plain)
+
+                // A user's ring opens their latest post.
+                ForEach(uniqueStoryUsers, id: \.self) { name in
+                    Button {
+                        if let post = posts.first(where: { $0.username == name }) {
+                            storyPost = post
+                            showStoryPost = true
+                        }
+                    } label: {
+                        StoryRing(monogram: name, label: name)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.md)
+        }
+        .navigationDestination(isPresented: $showStoryPost) {
+            if let storyPost {
+                PostView(post: storyPost)
+            }
+        }
+        .fullScreenCover(isPresented: $showARCamera) {
+            ARViewControllerWrapper()
+                .ignoresSafeArea()
+        }
+    }
+
+    /// Distinct usernames, in feed order, for the stories rail.
+    private var uniqueStoryUsers: [String] {
+        var seen = Set<String>()
+        return posts.compactMap { post in
+            guard !seen.contains(post.username) else { return nil }
+            seen.insert(post.username)
+            return post.username
+        }
+    }
 }
 
 #Preview {
     ARMediaView()
 }
 
-struct SubARView: View {
-    @ObservedObject var post:Post
+// MARK: - Feed post card
+
+struct FeedPostCard: View {
+    @ObservedObject var post: Post
     @State private var showComments = false
     @State private var showMenuSheet = false
-    
+    @State private var showHeartBurst = false
+    @State private var goToDetail = false
+
     var body: some View {
-        VStack {
-            // User Info and Options
-            Spacer().frame(height: 5)
-            HStack {
-                Image(systemName: post.userImage)
-                    .resizable()
-                    .frame(width: 30, height: 30)
-                    .clipShape(Circle())
-                
-                Text(post.username)
-                    .font(.custom("SF Pro Display",size:20))
-                    .foregroundColor(Color(red: 102/255, green: 82/255, blue: 56/255))
-                
-                
+        VStack(alignment: .leading, spacing: 0) {
+            // Header row
+            HStack(spacing: 10) {
+                Avatar(systemImage: post.userImage, size: 34)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(post.username)
+                        .font(AppFont.inter(13, .semibold))
+                        .foregroundColor(.appText)
+                    Text(post.title)
+                        .font(AppFont.inter(11, .regular))
+                        .foregroundColor(.appTextSecondary)
+                }
+
                 Spacer()
-                Button {
-                    showMenuSheet = true
-                } label: {
-                       Image(systemName: "ellipsis")
-                           .frame(width: 30, height: 30)
-                           .foregroundColor(.black)
-                   }
-                
+
+                Button { showMenuSheet = true } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.appText)
+                }
             }
-            .padding(.horizontal,20)
-            
-            Spacer().frame(height: 30)
-            
-            ZStack(alignment: .bottomLeading) {
-                // AR Image with rounded corners and overlay
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, 10)
+
+            // Full-bleed image — tap to open the post, double-tap to like.
+            ZStack {
                 Image(post.imageName)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFill()
+                    .frame(height: 380)
                     .frame(maxWidth: .infinity)
-                    .frame(maxHeight: 300)
-                    .background(Color.black.opacity(0.5))
-                    .cornerRadius(20)
-                
-                // Overlay Content
-                Text(post.description)
-                    .frame(maxWidth: .infinity)
-                    .font(.callout)
-                    .foregroundColor(.white)
-                    .lineLimit(3)
-                    .padding()
-                    .background(Color.black.opacity(0.5))
-                    .cornerRadius(20)
+                    .containerRelativeFrame(.horizontal)
+                    .clipped()
+                    .background(Color.appSurface)
+                    .contentShape(Rectangle())
+
+                if showHeartBurst {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 84))
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.3), radius: 8)
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                }
             }
-            .padding(.horizontal)
-            
-            Spacer().frame(height: 30)
-            
-            // Interaction Bar
-            HStack {
-                Button(action: {
+            .onTapGesture(count: 2) { doubleTapLike() }
+            .onTapGesture { goToDetail = true }
+            .navigationDestination(isPresented: $goToDetail) {
+                PostView(post: post)
+            }
+
+            // Action bar
+            HStack(spacing: 18) {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     post.toggleLike()
-                }) {
-                    HStack {
-                        Image(systemName: post.user_liked ? "heart.fill" : "heart")
-                            .foregroundColor(.red)
-                            .font(.largeTitle)
-                        Text(post.likes >= 100 ? "100+" : "\(post.likes)")
-                    }
+                } label: {
+                    Image(systemName: post.user_liked ? "heart.fill" : "heart")
+                        .foregroundColor(post.user_liked ? .appLike : .appText)
+                        .symbolEffect(.bounce, value: post.user_liked)
                 }
-                
-                Button(action: {
-                    showComments.toggle()
-                }) {
-                    HStack {
-                        Image(systemName: "ellipsis.message")
-                            .font(.largeTitle)
-                        Text("\(post.numberOfComments())+")
-                    }
+
+                Button { showComments = true } label: {
+                    Image(systemName: "bubble.right")
+                        .foregroundColor(.appText)
                 }
-                
+
+                Button { showMenuSheet = true } label: {
+                    Image(systemName: "paperplane")
+                        .foregroundColor(.appText)
+                }
+
                 Spacer()
-                
-                Text(post.time_ago())
-                    .padding(.leading, 30)
-                
+
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    post.toggleSaved()
+                } label: {
+                    Image(systemName: post.saved ? "bookmark.fill" : "bookmark")
+                        .foregroundColor(.appText)
+                        .symbolEffect(.bounce, value: post.saved)
+                }
             }
-            .padding(.horizontal)
+            .font(.system(size: 23, weight: .regular))
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            // Likes
+            Text("\(post.likes >= 1000 ? "1,000+" : "\(post.likes)") likes")
+                .font(AppFont.inter(13, .semibold))
+                .foregroundColor(.appText)
+                .padding(.horizontal, AppSpacing.md)
+
+            // Caption: username + description
+            (Text(post.username + "  ").font(AppFont.inter(13, .semibold))
+             + Text(post.description).font(AppFont.inter(13, .regular)))
+                .foregroundColor(.appText)
+                .lineLimit(2)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.top, 3)
+
+            // View comments
+            if post.numberOfComments() > 0 {
+                Button { showComments = true } label: {
+                    Text("View all \(post.numberOfComments()) comments")
+                        .font(AppFont.inter(13, .regular))
+                        .foregroundColor(.appTextSecondary)
+                }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.top, 3)
+            }
+
+            // Timestamp
+            Text(post.time_ago().uppercased())
+                .font(AppFont.inter(10, .regular))
+                .foregroundColor(.appTextSecondary)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.top, 4)
+                .padding(.bottom, 16)
         }
-        .foregroundColor(.black) // Set the text color to grey
-        .font(.body)
-        .sheet(isPresented: $showMenuSheet) {
-            MenuSheet(post: post)
-        }
+        .sheet(isPresented: $showMenuSheet) { MenuSheet(post: post) }
         .sheet(isPresented: $showComments) {
             CommentSectionView(viewModel: $post.commentsModel)
         }
-        
+    }
+
+    /// Instagram's signature interaction — double-tap the photo to like it
+    /// (never unlike), with a heart burst and haptic.
+    private func doubleTapLike() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        if !post.user_liked {
+            post.toggleLike()
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            showHeartBurst = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+            withAnimation(.easeOut(duration: 0.2)) {
+                showHeartBurst = false
+            }
+        }
     }
 }

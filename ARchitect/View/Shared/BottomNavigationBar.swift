@@ -2,81 +2,74 @@
 //  BottomNavigationBar.swift
 //  ARchitect
 //
-//  Created by Ronit Jain on 4/9/25.
-//
-//  Controlled, stateless bar driven by RootTabView. It no longer pushes views
-//  onto the navigation stack — it just reports taps and reflects the selected
-//  tab, which is what makes tab switching a smooth crossfade instead of an
-//  ever-growing push stack.
+//  Instagram-style bottom tab bar: a flat, top-bordered bar with Feed, Explore,
+//  a prominent AR-create button, and Profile. Controlled and stateless — driven
+//  by RootTabView, it just reports taps and reflects the selected tab.
 //
 
 import SwiftUI
 
 struct BottomNavigationBar: View {
     @Binding var selectedTab: AppTab
-    var onHome: () -> Void
-    var onPlus: () -> Void
     var onFeed: () -> Void
-
-    private let barColor = Color(red: 99/255, green: 83/255, blue: 70/255)
-    private let iconColor = Color(red: 222/255, green: 204/255, blue: 177/255)
+    var onExplore: () -> Void
+    var onPlus: () -> Void
+    var onProfile: () -> Void
 
     var body: some View {
-        HStack {
-            Spacer()
+        HStack(spacing: 0) {
+            tabButton(icon: "house", selectedIcon: "house.fill",
+                      isSelected: selectedTab == .feed, action: onFeed)
 
-            tabButton(
-                icon: "house.fill",
-                isSelected: selectedTab == .home,
-                action: onHome
-            )
+            tabButton(icon: "magnifyingglass", selectedIcon: "magnifyingglass",
+                      isSelected: selectedTab == .explore, action: onExplore)
 
-            Spacer()
-
-            // Center AR button — visually distinct, always actionable.
+            // Center AR create button — the emphasized action.
             Button(action: onPlus) {
-                Image(systemName: "plus.app.fill")
-                    .font(.title)
-                    .fontWeight(.semibold)
-                    .foregroundColor(iconColor)
-                    .scaleEffect(1.05)
+                Image(systemName: "arkit")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.appOnPrimary)
+                    .frame(width: 46, height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(Color.appPrimary)
+                    )
             }
+            .frame(maxWidth: .infinity)
 
-            Spacer()
-
-            tabButton(
-                icon: "newspaper.fill",
-                isSelected: selectedTab == .feed,
-                action: onFeed
-            )
-
-            Spacer()
+            profileButton
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        // The bar sits at the physical bottom (the root ignores the bottom
+        // safe area); this clears the home indicator, Instagram-style.
+        .padding(.bottom, 28)
+        .padding(.horizontal, AppSpacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(barColor.opacity(0.90))
+            Color.appBackground
+                .overlay(Rectangle().fill(Color.appDivider).frame(height: 0.5), alignment: .top)
         )
-        .padding(.horizontal, 40)
-        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+    }
+
+    private var profileButton: some View {
+        Button(action: onProfile) {
+            Avatar(monogram: "M", size: 28)
+                .overlay(
+                    Circle().stroke(selectedTab == .profile ? Color.appText : Color.clear, lineWidth: 2)
+                )
+        }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
-    private func tabButton(icon: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func tabButton(icon: String, selectedIcon: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.title2)
-                .fontWeight(.semibold)
-                .foregroundColor(iconColor)
-                .padding(8)
-                .background(
-                    Circle()
-                        .fill(isSelected ? Color.white.opacity(0.18) : Color.clear)
-                )
-                .scaleEffect(isSelected ? 1.1 : 1.0)
+            Image(systemName: isSelected ? selectedIcon : icon)
+                .font(.system(size: 24, weight: isSelected ? .semibold : .regular))
+                .foregroundColor(.appText)
+                .scaleEffect(isSelected ? 1.05 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -90,12 +83,13 @@ struct ARViewControllerWrapper: UIViewControllerRepresentable {
 
 #Preview {
     ZStack(alignment: .bottom) {
-        Color(red: 255/255, green: 242/255, blue: 223/255).ignoresSafeArea()
+        Color.appBackground.ignoresSafeArea()
         BottomNavigationBar(
-            selectedTab: .constant(.home),
-            onHome: {},
+            selectedTab: .constant(.feed),
+            onFeed: {},
+            onExplore: {},
             onPlus: {},
-            onFeed: {}
+            onProfile: {}
         )
     }
 }

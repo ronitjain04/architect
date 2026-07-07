@@ -17,6 +17,7 @@ class Post: ObservableObject, Identifiable {
     let timeAgo: Date = Date()
     @Published var likes: Int
     @Published var user_liked: Bool
+    @Published var saved: Bool = false
     @Published var commentsModel: CommentViewModel
     
     init(username: String, userImage: String, title: String, imageName: String, description: String, likes: Int, user_liked: Bool = false, commentsModel: CommentViewModel = CommentViewModel()) {
@@ -94,6 +95,10 @@ class Post: ObservableObject, Identifiable {
             likes += 1
         }
         user_liked.toggle()
+    }
+
+    func toggleSaved() {
+        saved.toggle()
     }
     
     func addComment(text: String, publisher: String) {

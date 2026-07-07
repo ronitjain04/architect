@@ -2,109 +2,82 @@
 //  LoginView.swift
 //  ARchitect
 //
+//  Instagram-style log in screen, consistent with AuthenticationView.
 //
 
 import SwiftUI
 import FirebaseAuth
 import GoogleSignIn
 
-
-
 struct LoginView: View {
-	
-	struct GoogleSignInButtonView: UIViewRepresentable {
-		func makeUIView(context: Context) -> GIDSignInButton {
-			let button = GIDSignInButton()
-			return button
-		}
+    @State private var username: String = ""
+    @State private var password: String = ""
+    @Binding var isAuthenticated: Bool
 
-		func updateUIView(_ uiView: GIDSignInButton, context: Context) {
-			// No updates needed
-		}
-	}
+    var body: some View {
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
 
-	@State private var username: String = ""
-	@State private var password: String = ""
-	@Binding var isAuthenticated: Bool
-	
-	var body: some View {
-		VStack(alignment: .leading) {
-			Spacer().frame(height: 100)
-			HStack {
-				Text("Login").font(.system(size:40, weight: .bold, design: .monospaced))
-					.padding(.leading)
-				Spacer().frame(width: 200)
-			}
-			Spacer().frame(height: 100)
-			VStack(alignment: .leading) {
-				Text("Username")
-					.font(.system(size:20, design: .monospaced))
-					.foregroundColor(.black)
-				
-				TextField("", text: $username)
-					.textFieldStyle(.plain)
-					.padding(.vertical, 2)
-					.overlay(Rectangle().frame(height: 1).foregroundColor(.gray), alignment: .bottom)
-			}
-			.padding()
-			VStack(alignment: .leading) {
-				Text("Password")
-					.font(.system(size:20, design: .monospaced))
-					.foregroundColor(.black)
-				
-				SecureField("", text: $password)
-					.textFieldStyle(.plain)
-					.padding(.vertical, 2)
-					.overlay(Rectangle().frame(height: 1).foregroundColor(.gray), alignment: .bottom)
-			}
-			.padding(.horizontal)
-			HStack {
-				Spacer().frame(width: 230)
-				Button(action: {
-					
-				}) {
-					Text("Forgot Password?").font(.system(size:20, weight: .light))
-						.foregroundColor(.gray)
-				}
-			}
-			.padding(.vertical)
-			Spacer().frame(height: 70)
-			HStack {
-				Spacer()
-				Button(action: {
-					isAuthenticated = true // for testing purpose
-					print("Welcome \(username), your password is \(password)")
-				}) {
-					Text("Login")
-						.font(.system(size: 20, design: .monospaced))
-						.foregroundColor(.white)
-						.padding()
-						.frame(width: 350, height: 50)
-						.background(Color.black)
-						.cornerRadius(15)
-				}
-				Spacer()
-			}
-			Spacer()
-			HStack {
-				Spacer()
-				GoogleSignInButtonView()
-					.frame(width: 350, height: 50)
-					.onTapGesture {
-						GoogleAuthService.signIn {
-							isAuthenticated = true
-						}
-					}
-				Spacer()
-			}
-			Spacer().frame(height: 250)
-		}
-		.frame(maxHeight: .infinity, alignment: .leading)
-	}
-	
+            VStack(spacing: 0) {
+                Spacer()
+
+                VStack(spacing: AppSpacing.xs) {
+                    Text("ARchitect")
+                        .font(AppFont.fraunces(40, .semibold))
+                        .foregroundColor(.appText)
+                    Text("Welcome back")
+                        .font(AppFont.inter(13, .regular))
+                        .foregroundColor(.appTextSecondary)
+                }
+                .padding(.bottom, AppSpacing.xl)
+
+                VStack(spacing: AppSpacing.sm) {
+                    AuthField(placeholder: "Username", text: $username)
+                    AuthField(placeholder: "Password", text: $password, isSecure: true)
+                }
+
+                Button("Forgot password?") { }
+                    .font(AppFont.inter(12, .medium))
+                    .foregroundColor(.appAccent)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, AppSpacing.sm)
+
+                Button("Log in") {
+                    isAuthenticated = true
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.top, AppSpacing.md)
+
+                HStack(spacing: AppSpacing.sm) {
+                    Rectangle().fill(Color.appDivider).frame(height: 1)
+                    Text("OR").font(AppFont.inter(11, .semibold)).foregroundColor(.appTextSecondary)
+                    Rectangle().fill(Color.appDivider).frame(height: 1)
+                }
+                .padding(.vertical, AppSpacing.lg)
+
+                Button {
+                    GoogleAuthService.signIn { isAuthenticated = true }
+                } label: {
+                    HStack(spacing: AppSpacing.sm) {
+                        Image(systemName: "g.circle.fill").font(.system(size: 18))
+                        Text("Continue with Google").font(AppFont.inter(14, .semibold))
+                    }
+                    .foregroundColor(.appPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                            .stroke(Color.appPrimary.opacity(0.4), lineWidth: 1.5)
+                    )
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, AppSpacing.xl)
+        }
+    }
 }
 
-
 #Preview {
-	LoginView(isAuthenticated: .constant(false))
+    LoginView(isAuthenticated: .constant(false))
 }

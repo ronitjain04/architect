@@ -2,57 +2,67 @@
 //  RootTabView.swift
 //  ARchitect
 //
-//  Single source of truth for top-level navigation.
+//  Single source of truth for top-level navigation, modelled on Instagram's
+//  bottom tab bar: Feed · Explore · (AR create) · Profile.
 //
-//  Replaces the old pattern where GeneralView and ARMediaView each embedded
-//  their own BottomNavigationBar full of NavigationLinks — which pushed a new
-//  screen onto the stack every time you "switched tabs", stacking Home/Feed
-//  endlessly. Here a real TabView owns tab state (so each tab keeps its own
-//  navigation + scroll position), the native tab bar is hidden, and a single
-//  floating BottomNavigationBar drives selection.
+//  A real TabView owns tab state (so each tab keeps its own navigation + scroll
+//  position), the native tab bar is hidden, and a single floating
+//  BottomNavigationBar drives selection. The center AR button presents the
+//  capture experience as a full-screen cover.
 //
 
 import SwiftUI
 
 enum AppTab: Hashable {
-    case home
     case feed
+    case explore
+    case profile
 }
 
 struct RootTabView: View {
-    @State private var selectedTab: AppTab = .home
+    @State private var selectedTab: AppTab = .feed
 
     // One navigation path per tab so each tab keeps its own stack and we can
     // pop-to-root when the user re-taps the tab they're already on.
-    @State private var homePath = NavigationPath()
     @State private var feedPath = NavigationPath()
+    @State private var explorePath = NavigationPath()
+    @State private var profilePath = NavigationPath()
 
     @State private var isShowingAR = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
-                NavigationStack(path: $homePath) {
-                    GeneralView()
-                }
-                .toolbar(.hidden, for: .tabBar)
-                .tag(AppTab.home)
-
                 NavigationStack(path: $feedPath) {
                     ARMediaView()
                 }
                 .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.feed)
+
+                NavigationStack(path: $explorePath) {
+                    FurnitureExploreView()
+                }
+                .toolbar(.hidden, for: .tabBar)
+                .tag(AppTab.explore)
+
+                NavigationStack(path: $profilePath) {
+                    ProfileView()
+                }
+                .toolbar(.hidden, for: .tabBar)
+                .tag(AppTab.profile)
             }
 
             BottomNavigationBar(
                 selectedTab: $selectedTab,
-                onHome: { select(.home) },
+                onFeed: { select(.feed) },
+                onExplore: { select(.explore) },
                 onPlus: { isShowingAR = true },
-                onFeed: { select(.feed) }
+                onProfile: { select(.profile) }
             )
         }
-        // Keep the bar anchored even when a keyboard appears.
+        // Extend under the home indicator so the bar hugs the physical bottom
+        // (Instagram-style), and keep it anchored when a keyboard appears.
+        .ignoresSafeArea(edges: .bottom)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .fullScreenCover(isPresented: $isShowingAR) {
             ARViewControllerWrapper()
@@ -63,10 +73,12 @@ struct RootTabView: View {
     /// Re-tapping the active tab pops it to root; tapping a different tab
     /// crossfades to it.
     private func select(_ tab: AppTab) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         if selectedTab == tab {
             switch tab {
-            case .home: homePath = NavigationPath()
             case .feed: feedPath = NavigationPath()
+            case .explore: explorePath = NavigationPath()
+            case .profile: profilePath = NavigationPath()
             }
         } else {
             withAnimation(.easeInOut(duration: 0.22)) {

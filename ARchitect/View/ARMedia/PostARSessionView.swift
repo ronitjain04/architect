@@ -15,12 +15,13 @@ class EntityWrapper: Identifiable {
 }
 
 struct ARSessionView2: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var arView = ARView(frame: .zero)
     let config: VREnvironmentConfig
     @State private var showInfoPanel: Bool = false
     @State private var selectedEntity: ModelEntity? = nil
     @State private var selectedObjectInfo: VREnvironmentConfig.VRObjectConfig? = nil
-    
+
     var body: some View {
         ZStack {
             ARViewContainer2(
@@ -30,7 +31,20 @@ struct ARSessionView2: View {
                 selectedEntity: $selectedEntity,
                 selectedObjectInfo: $selectedObjectInfo
             )
-            
+
+            // Floating back button — the AR view fills the screen, so it needs
+            // its own way out.
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.black.opacity(0.55)))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.sm)
+
             if showInfoPanel, let objectInfo = selectedObjectInfo {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
