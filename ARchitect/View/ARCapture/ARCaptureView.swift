@@ -201,6 +201,7 @@ struct FurnitureGallerySheet: View {
                             .padding(.leading, 76)
                     }
                 }
+                .padding(.bottom, 28)
             }
         }
         .presentationDetents([.medium])

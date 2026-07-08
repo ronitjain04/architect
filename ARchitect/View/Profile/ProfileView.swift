@@ -303,10 +303,10 @@ struct EditProfileSheet: View {
                 }
             }
             .buttonStyle(PrimaryButtonStyle())
-
-            Spacer()
+            .padding(.bottom, 28)
         }
         .padding(.horizontal, AppSpacing.lg)
+        .frame(maxHeight: .infinity, alignment: .top)
         .presentationDetents([.height(380)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.appBackground)

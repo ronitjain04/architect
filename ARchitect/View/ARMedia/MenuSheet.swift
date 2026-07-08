@@ -46,7 +46,7 @@ struct MenuSheet: View {
         }
         .padding(.top, AppSpacing.md)
         .frame(maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(isOwnPost ? 230 : 170)])
+        .presentationDetents([.height(isOwnPost ? 258 : 198)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.appBackground)
         .confirmationDialog("Delete this post?", isPresented: $confirmDelete, titleVisibility: .visible) {
