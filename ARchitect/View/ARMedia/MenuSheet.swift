@@ -14,6 +14,11 @@ struct MenuSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmDelete = false
 
+    /// Measured height of the sheet's content, fed back into the detent so
+    /// the sheet hugs its rows instead of guessing a fixed height (guessed
+    /// heights left a large dead zone under the last row).
+    @State private var contentHeight: CGFloat = 220
+
     private var isOwnPost: Bool {
         session.profile?.username == post.username
     }
@@ -45,8 +50,19 @@ struct MenuSheet: View {
             }
         }
         .padding(.top, AppSpacing.md)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(isOwnPost ? 258 : 198)])
+        .padding(.bottom, 28)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: MenuSheetHeightKey.self, value: proxy.size.height)
+            }
+        )
+        // Pin the rows to the sheet's TRUE bottom edge (ignoring the home
+        // indicator inset) so the 28pt padding above is the entire gap —
+        // regardless of any extra height the system gives the sheet.
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(.container, edges: .bottom)
+        .onPreferenceChange(MenuSheetHeightKey.self) { contentHeight = $0 }
+        .presentationDetents([.height(contentHeight)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.appBackground)
         .confirmationDialog("Delete this post?", isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -80,6 +96,14 @@ struct MenuSheet: View {
         .padding(.horizontal, AppSpacing.lg)
         .padding(.vertical, 16)
         .contentShape(Rectangle())
+    }
+}
+
+/// Reports the menu content's measured height up to the detent.
+private struct MenuSheetHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

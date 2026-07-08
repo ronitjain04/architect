@@ -13,6 +13,12 @@ struct CommentSectionView: View {
             model: viewModel,
             currentUsername: session.profile?.username ?? "you"
         )
+        // Lay out to the sheet's TRUE bottom edge instead of stopping at
+        // the home-indicator inset — otherwise the input bar's 28pt bottom
+        // padding stacks on the system's ~34pt inset and floats mid-air.
+        // Only the container inset is ignored; the keyboard safe area still
+        // applies, so the input bar rises with the keyboard as before.
+        .ignoresSafeArea(.container, edges: .bottom)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.appBackground)
