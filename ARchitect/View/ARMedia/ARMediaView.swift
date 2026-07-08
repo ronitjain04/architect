@@ -14,6 +14,14 @@ struct ARMediaView: View {
     @StateObject private var feed = FeedStore()
     @State private var unreadCount = 0
 
+    // Post detail navigation lives here, not inside FeedPostCard: a
+    // navigationDestination declared inside a LazyVStack row is only
+    // registered with the NavigationStack while that row is on-screen, so
+    // SwiftUI ignores it for rows the lazy container hasn't materialized
+    // yet. Hoisting it above the ScrollView keeps it visible at all times.
+    @State private var selectedPost: Post?
+    @State private var showPostDetail = false
+
     private var posts: [Post] { feed.posts }
 
     var body: some View {
@@ -36,7 +44,10 @@ struct ARMediaView: View {
                             emptyFeed
                         } else {
                             ForEach(posts) { post in
-                                FeedPostCard(post: post)
+                                FeedPostCard(post: post) { tapped in
+                                    selectedPost = tapped
+                                    showPostDetail = true
+                                }
                             }
                         }
                     }
@@ -53,6 +64,11 @@ struct ARMediaView: View {
         // This view supplies its own header, so hide the native nav bar to
         // avoid a duplicate empty bar above it.
         .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $showPostDetail) {
+            if let selectedPost {
+                PostView(post: selectedPost)
+            }
+        }
         // Security rules require a signed-in user, and a listener attached
         // pre-auth stays denied — so (re)attach whenever auth flips on.
         .task(id: session.isAuthenticated) {
@@ -167,10 +183,12 @@ struct PostImage: View {
 struct FeedPostCard: View {
     @EnvironmentObject var session: SessionStore
     @ObservedObject var post: Post
+    /// Reports a tap on the image (not a double-tap) so the parent — which
+    /// owns the single, hoisted navigationDestination — can present detail.
+    var onOpenDetail: (Post) -> Void
     @State private var showComments = false
     @State private var showMenuSheet = false
     @State private var showHeartBurst = false
-    @State private var goToDetail = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -222,10 +240,7 @@ struct FeedPostCard: View {
                 }
             }
             .onTapGesture(count: 2) { doubleTapLike() }
-            .onTapGesture { goToDetail = true }
-            .navigationDestination(isPresented: $goToDetail) {
-                PostView(post: post)
-            }
+            .onTapGesture { onOpenDetail(post) }
 
             // Action bar
             HStack(spacing: 18) {
