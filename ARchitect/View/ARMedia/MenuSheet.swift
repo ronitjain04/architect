@@ -16,11 +16,20 @@ struct MenuSheet: View {
 
     /// Measured height of the sheet's content, fed back into the detent so
     /// the sheet hugs its rows instead of guessing a fixed height (guessed
-    /// heights left a large dead zone under the last row).
-    @State private var contentHeight: CGFloat = 220
+    /// heights left a large dead zone under the last row). Zero until the
+    /// first measurement lands; the detent falls back to the estimate below.
+    @State private var contentHeight: CGFloat = 0
 
     private var isOwnPost: Bool {
         session.profile?.username == post.username
+    }
+
+    /// First-frame estimate keyed to the row count (row ≈ 56pt: 16+16
+    /// vertical padding + ~24pt label) so the sheet opens at roughly its
+    /// final size and the measured correction is imperceptible — a fixed
+    /// seed made the 2-row sheet visibly shrink ~60pt after presenting.
+    private var estimatedContentHeight: CGFloat {
+        AppSpacing.md + CGFloat(isOwnPost ? 3 : 2) * 56 + 28
     }
 
     var body: some View {
@@ -61,8 +70,12 @@ struct MenuSheet: View {
         // regardless of any extra height the system gives the sheet.
         .frame(maxHeight: .infinity, alignment: .bottom)
         .ignoresSafeArea(.container, edges: .bottom)
-        .onPreferenceChange(MenuSheetHeightKey.self) { contentHeight = $0 }
-        .presentationDetents([.height(contentHeight)])
+        .onPreferenceChange(MenuSheetHeightKey.self) { height in
+            // Ignore transient zero/degenerate values (e.g. during
+            // teardown) — .height(0) would collapse the sheet to a sliver.
+            if height > 50 { contentHeight = height }
+        }
+        .presentationDetents([.height(contentHeight > 0 ? contentHeight : estimatedContentHeight)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.appBackground)
         .confirmationDialog("Delete this post?", isPresented: $confirmDelete, titleVisibility: .visible) {
