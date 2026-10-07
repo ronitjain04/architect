@@ -13,12 +13,15 @@ import GoogleSignIn
 struct ARchitectApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
+    @State private var sharedPostID: String?
+
     var body: some Scene {
         WindowGroup {
-            MainView()
+            MainView(sharedPostID: $sharedPostID)
                 // Google Sign-In redirect callback.
                 .onOpenURL { url in
-                    _ = GIDSignIn.sharedInstance.handle(url)
+                    if let id = RoomLink.postID(from: url) { sharedPostID = id }
+                    else { _ = GIDSignIn.sharedInstance.handle(url) }
                 }
         }
     }

@@ -12,6 +12,14 @@
 				<string>com.googleusercontent.apps.917400139536-j6d53cltr7m27hnrhb2sllouhghj6981</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>architect</string>
+			</array>
+		</dict>
 	</array>
 	<key>UIAppFonts</key>
 	<array>

@@ -8,6 +8,8 @@ struct FurnitureState {
 }
 
 struct FurnitureTryOutView: View {
+    var model: RoomFurnitureModel = .comfortChair
+    @State private var loadError: String?
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.dismiss) private var dismiss
     @State private var state = FurnitureState()
@@ -26,7 +28,7 @@ struct FurnitureTryOutView: View {
 
             VStack {
                 ZStack {
-                    Text("Curved Comfort Chair")
+                    Text(model.title)
                         .font(AppFont.fraunces(18, .semibold))
                         .foregroundColor(.appText)
 
@@ -46,7 +48,7 @@ struct FurnitureTryOutView: View {
                 }
 
                 HStack {
-                    Text("Model by @danielgindi")
+                    Text("Preview dimensions are approximate")
                         .font(AppFont.inter(12, .regular))
                         .foregroundColor(.appTextSecondary)
                         .padding(.leading, AppSpacing.md)
@@ -70,12 +72,13 @@ struct FurnitureTryOutView: View {
                     state.parentContainer = parentContainer
                     state.rotatingChild = rotatingChild
                     
-                    if let couch = try? await ModelEntity(named: "Curved Comfort Chair") {
+                    if let couch = try? await ModelEntity(named: model.resourceName) {
                         couch.name = "armChair"
-                        couch.setScale(SIMD3<Float>(1.5, 1.5, 1.5), relativeTo: couch)
+                        let width = couch.visualBounds(relativeTo: nil).extents.x
+                        if width > 0 { couch.scale *= SIMD3<Float>(repeating: model.previewWidth / width) }
                         couch.components.set(InputTargetComponent())
                         rotatingChild.addChild(couch)
-                    }
+                    } else { loadError = "Could not load this furniture model." }
                     
                     let rotationSpeed: Float = .pi / 4.0
                     _ = content.subscribe(to: SceneEvents.Update.self) { event in
@@ -168,7 +171,10 @@ struct FurnitureTryOutView: View {
                 }
             }
             .padding(.vertical)
-            .navigationTitle("Curved Comfort Chair Preview")
+            .navigationTitle(model.title + " Preview")
+            .alert("Model unavailable", isPresented: Binding(get: { loadError != nil }, set: { if !$0 { loadError = nil } })) {
+                Button("Close") { dismiss() }
+            } message: { Text(loadError ?? "") }
             .animation(.easeInOut, value: useWorldTracking)
         }
     }

@@ -155,7 +155,7 @@ struct FollowButton: View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             session.toggleFollow(username: username, uid: uid)
-            onToggle(following ? -1 : +1)
+
         } label: {
             Text(following ? "Following" : "Follow")
                 .font(AppFont.inter(13, .semibold))
@@ -166,6 +166,10 @@ struct FollowButton: View {
                     RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
                         .fill(following ? Color.appSurfaceAlt : Color.appPrimary)
                 )
+        }
+        .disabled(uid == nil)
+        .onChange(of: session.isFollowing(username)) { oldValue, newValue in
+            if oldValue != newValue { onToggle(newValue ? 1 : -1) }
         }
     }
 }

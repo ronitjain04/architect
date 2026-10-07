@@ -108,6 +108,19 @@ enum SocialService {
     /// Deletes a post document (rules enforce author-only).
     static func deletePost(_ post: Post) async throws {
         guard let docID = post.docID else { return }
-        try await Firestore.firestore().collection("posts").document(docID).delete()
+        let db = Firestore.firestore()
+        let ref = db.collection("posts").document(docID)
+        // Keep the parent until child cleanup succeeds so failed deletion can be retried.
+        while true {
+            let comments = try await ref.collection("comments").limit(to: 200).getDocuments()
+            if comments.documents.isEmpty { break }
+            let batch = db.batch()
+            comments.documents.forEach { batch.deleteDocument($0.reference) }
+            try await batch.commit()
+        }
+        let finalBatch = db.batch()
+        finalBatch.deleteDocument(ref.collection("experience").document("scene"))
+        finalBatch.deleteDocument(ref)
+        try await finalBatch.commit()
     }
 }

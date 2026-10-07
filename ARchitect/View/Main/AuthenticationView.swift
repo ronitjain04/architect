@@ -2,6 +2,9 @@ import SwiftUI
 import FirebaseCore
 import GoogleSignIn
 import FirebaseAuth
+import AuthenticationServices
+import CryptoKit
+import Security
 
 /// The entry/login screen — an Instagram-style centered layout: a serif
 /// wordmark, soft cream fields, a primary "Log in" action, a Google option,
@@ -12,6 +15,7 @@ struct AuthenticationView: View {
     @State private var password: String = ""
     @State private var errorMessage: String?
     @State private var isLoading = false
+    @State private var appleNonce: String?
 
     var body: some View {
         NavigationStack {
@@ -82,6 +86,12 @@ struct AuthenticationView: View {
                         session.signInWithGoogle()
                     }
 
+                    SignInWithAppleButton(.signIn, onRequest: startAppleSignIn, onCompletion: finishAppleSignIn)
+                        .signInWithAppleButtonStyle(.black)
+                        .frame(height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+                        .padding(.top, AppSpacing.sm)
+
                     Spacer()
 
                     Divider().background(Color.appDivider)
@@ -97,6 +107,47 @@ struct AuthenticationView: View {
                     .padding(.bottom, AppSpacing.sm)
                 }
                 .padding(.horizontal, AppSpacing.xl)
+            }
+        }
+        .onChange(of: session.errorMessage) { errorMessage = session.errorMessage }
+    }
+
+    private func startAppleSignIn(_ request: ASAuthorizationAppleIDRequest) {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard status == errSecSuccess else {
+            errorMessage = "Unable to start Apple sign-in. Please try again."
+            return
+        }
+        let alphabet = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        let nonce = String(bytes.map { alphabet[Int($0) % alphabet.count] })
+        appleNonce = nonce
+        let digest = SHA256.hash(data: Data(nonce.utf8))
+        request.nonce = digest.map { String(format: "%02x", $0) }.joined()
+        request.requestedScopes = [.fullName, .email]
+    }
+
+    private func finishAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .failure(let error):
+            if (error as NSError).code != ASAuthorizationError.canceled.rawValue {
+                errorMessage = error.localizedDescription
+            }
+        case .success(let authorization):
+            guard let apple = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let token = apple.identityToken,
+                  let idToken = String(data: token, encoding: .utf8),
+                  let nonce = appleNonce else {
+                errorMessage = "Apple sign-in did not return an identity token. Please try again."
+                return
+            }
+            appleNonce = nil
+            Task {
+                do {
+                    let credential = OAuthProvider.appleCredential(
+                        withIDToken: idToken, rawNonce: nonce, fullName: apple.fullName)
+                    try await Auth.auth().signIn(with: credential)
+                } catch { errorMessage = error.localizedDescription }
             }
         }
     }

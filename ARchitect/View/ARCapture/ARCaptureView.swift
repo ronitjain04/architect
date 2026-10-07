@@ -13,13 +13,22 @@ import RealityKit
 struct ARCaptureView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var manager = ARSessionManager()
+    @State private var isScanning = true
+    @State private var capturedExperience: RoomExperience?
     @State private var showGallery = false
     @State private var capturedImage: UIImage?
     @State private var showNewPost = false
 
     var body: some View {
         ZStack {
-            if manager.isARSupported {
+            if isScanning {
+                RoomScanView(session: manager.arView.session, onScanned: { room in
+                    manager.capturedRoom = room
+                    isScanning = false
+                    manager.attachGesturesIfNeeded()
+                    manager.start()
+                }, onCancel: { dismiss() })
+            } else if manager.isARSupported {
                 ARViewContainer(manager: manager)
                     .ignoresSafeArea()
             } else {
@@ -40,6 +49,7 @@ struct ARCaptureView: View {
             }
 
             // Chrome
+            if !isScanning {
             VStack {
                 HStack {
                     circleButton(icon: "chevron.left") { dismiss() }
@@ -47,6 +57,7 @@ struct ARCaptureView: View {
                     Spacer()
 
                     if let mode = manager.selectedMovementMode {
+                        circleButton(icon: "trash") { manager.removeSelected() }
                         circleButton(icon: mode == .horizontal
                                      ? "arrow.up.and.down.circle.fill"
                                      : "arrow.left.and.right.circle.fill") {
@@ -79,9 +90,15 @@ struct ARCaptureView: View {
                     // Shutter
                     Button {
                         manager.snapshot { image in
-                            guard let image else { return }
-                            capturedImage = image
-                            showNewPost = true
+                            guard let image else {
+                                manager.errorMessage = "Could not capture a preview. Please try again."
+                                return
+                            }
+                            do {
+                                capturedExperience = try manager.experience()
+                                capturedImage = image
+                                showNewPost = true
+                            } catch { manager.errorMessage = error.localizedDescription }
                         }
                     } label: {
                         ZStack {
@@ -98,10 +115,10 @@ struct ARCaptureView: View {
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.bottom, AppSpacing.xl)
             }
+            }
         }
         .onAppear {
-            manager.attachGesturesIfNeeded()
-            manager.start()
+            if !isScanning { manager.start() }
         }
         .onDisappear { manager.stop() }
         .sheet(isPresented: $showGallery) {
@@ -115,6 +132,7 @@ struct ARCaptureView: View {
                 NewPostView(
                     image: capturedImage,
                     usedFurniture: manager.usedFurnitureModels,
+                    experience: capturedExperience,
                     onShared: { dismiss() }
                 )
             }
@@ -124,6 +142,12 @@ struct ARCaptureView: View {
         } message: {
             Text("There isn't enough open floor in front of you to place the furniture. Move to a more open area and try again.")
         }
+        .alert("Could not complete action", isPresented: Binding(
+            get: { manager.errorMessage != nil },
+            set: { if !$0 { manager.errorMessage = nil } }
+        )) {
+            Button("OK") { manager.errorMessage = nil }
+        } message: { Text(manager.errorMessage ?? "") }
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -154,7 +178,7 @@ struct FurnitureGallerySheet: View {
     var onSelect: (String) -> Void
 
     // Bundled .usdz models (display name derived from the file name).
-    private let models = ["Curved Comfort Chair", "Arm chair", "Grey Couch"]
+    private let models = RoomFurnitureModel.allCases.map(\.resourceName)
 
     var body: some View {
         VStack(spacing: 0) {

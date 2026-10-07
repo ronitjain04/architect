@@ -4,7 +4,7 @@
 //
 //  The "New post" composer — replaces the UIKit ScreenshotViewController.
 //  Shows the captured AR snapshot, takes a title + caption, and shares it:
-//  image to Firebase Storage, post document to Firestore. The live feed
+//  compact preview and room data to Firestore. The live feed
 //  listener picks it up immediately.
 //
 
@@ -16,6 +16,7 @@ struct NewPostView: View {
 
     let image: UIImage
     let usedFurniture: [String]
+    var experience: RoomExperience? = nil
     /// Called after a successful share; the presenter dismisses the whole
     /// capture flow back to the feed.
     var onShared: () -> Void
@@ -38,6 +39,7 @@ struct NewPostView: View {
                             .foregroundColor(.appText)
                     }
 
+                    .disabled(isUploading)
                     Spacer()
 
                     Text("New post")
@@ -92,7 +94,7 @@ struct NewPostView: View {
                                     .foregroundColor(.appTextSecondary)
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: AppSpacing.sm) {
-                                        ForEach(usedFurniture, id: \.self) { name in
+                                        ForEach(Array(Set(usedFurniture)).sorted(), id: \.self) { name in
                                             Text(name.capitalized)
                                                 .font(AppFont.inter(12, .semibold))
                                                 .foregroundColor(.white)
@@ -105,6 +107,10 @@ struct NewPostView: View {
                             }
                         }
 
+                        if experience != nil {
+                            Text("Sharing includes your scanned room and furniture. All signed-in beta testers can view it.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                         if let errorMessage {
                             Text(errorMessage)
                                 .font(AppFont.inter(12, .medium))
@@ -129,6 +135,7 @@ struct NewPostView: View {
                     title: title.isEmpty ? "Untitled space" : title,
                     description: caption,
                     furniture: usedFurniture,
+                    experience: experience,
                     username: session.profile?.username ?? "you"
                 )
                 onShared()

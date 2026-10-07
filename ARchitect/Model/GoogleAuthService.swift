@@ -14,28 +14,28 @@ import GoogleSignIn
 enum GoogleAuthService {
     /// Presents the Google Sign-In sheet and, on success, authenticates with Firebase.
     /// - Parameter onSuccess: called on the main thread once Firebase auth completes.
-    static func signIn(onSuccess: @escaping () -> Void) {
+    static func signIn(completion: @escaping (Error?) -> Void) {
         guard let clientID = FirebaseApp.app()?.options.clientID else {
-            print("Client ID not found")
+            completion(NSError(domain: "ARchitect", code: 1, userInfo: [NSLocalizedDescriptionKey: "Google sign-in is not configured."]))
             return
         }
 
         let config = GIDConfiguration(clientID: clientID)
         GIDSignIn.sharedInstance.configuration = config
 
-        guard let rootViewController = UIApplication.shared.windows.first?.rootViewController else {
-            print("No root view controller found")
+        guard let rootViewController = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first(where: \.isKeyWindow)?.rootViewController else {
+            completion(NSError(domain: "ARchitect", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unable to present Google sign-in."]))
             return
         }
 
         GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController) { result, error in
             if let error = error {
-                print("Google Sign-In failed: \(error.localizedDescription)")
+                completion(error)
                 return
             }
 
             guard let user = result?.user, let idToken = user.idToken?.tokenString else {
-                print("No valid ID token")
+                completion(NSError(domain: "ARchitect", code: 3, userInfo: [NSLocalizedDescriptionKey: "Google did not return a valid sign-in token."]))
                 return
             }
 
@@ -46,12 +46,12 @@ enum GoogleAuthService {
 
             Auth.auth().signIn(with: credential) { authResult, error in
                 if let error = error {
-                    print("Firebase authentication failed: \(error.localizedDescription)")
+                    completion(error)
                     return
                 }
 
-                print("User signed in with Google: \(authResult?.user.displayName ?? "Unknown")")
-                onSuccess()
+
+                completion(nil)
             }
         }
     }

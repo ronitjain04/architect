@@ -12,9 +12,12 @@ import Foundation
 import ARKit
 import RealityKit
 import UIKit
+import RoomPlan
 
 final class ARSessionManager: NSObject, ObservableObject {
     let arView = ARView(frame: .zero)
+    var capturedRoom: CapturedRoom?
+    @Published var errorMessage: String?
 
     /// World tracking isn't available in the simulator.
     let isARSupported = ARWorldTrackingConfiguration.isSupported
@@ -59,24 +62,29 @@ final class ARSessionManager: NSObject, ObservableObject {
 
     func loadAndPlace(named modelName: String) {
         guard let modelURL = Bundle.main.url(forResource: modelName, withExtension: "usdz") else {
-            print("Error: Model \(modelName) not found in the local directory.")
+            errorMessage = "This furniture model is unavailable. Please choose another."
             return
         }
 
         do {
             let modelEntity = try ModelEntity.loadModel(contentsOf: modelURL)
+            let width = modelEntity.visualBounds(relativeTo: nil).extents.x
+            let target = RoomFurnitureModel.allCases.first { $0.resourceName == modelName }?.previewWidth ?? 1
+            if width > 0 { modelEntity.scale *= SIMD3<Float>(repeating: target / width) }
             modelEntity.generateCollisionShapes(recursive: true)
             placeFurnitureInScene(modelEntity: modelEntity, modelName: modelName)
 
-            if !usedFurnitureModels.contains(modelName) {
-                usedFurnitureModels.append(modelName)
-            }
+
         } catch {
-            print("Error: Failed to load model \(modelName) with error: \(error).")
+            errorMessage = "Could not load this furniture: \(error.localizedDescription)"
         }
     }
 
     private func placeFurnitureInScene(modelEntity: ModelEntity, modelName: String) {
+        guard furnitureWrappers.count < 50 else {
+            errorMessage = "Use at most 50 furniture pieces per room in the beta."
+            return
+        }
         // Raycast from screen center onto a horizontal plane.
         let raycastResults = arView.raycast(
             from: CGPoint(x: arView.bounds.midX, y: arView.bounds.midY),
@@ -94,7 +102,7 @@ final class ARSessionManager: NSObject, ObservableObject {
             raycastResult.worldTransform.columns.3.y,
             raycastResult.worldTransform.columns.3.z
         )
-        modelEntity.position = worldPosition
+        modelEntity.position = SIMD3(0, -modelEntity.visualBounds(relativeTo: nil).min.y, 0)
 
         let anchor = AnchorEntity(world: worldPosition)
         anchor.addChild(modelEntity)
@@ -102,7 +110,7 @@ final class ARSessionManager: NSObject, ObservableObject {
 
         // Select the new piece; deselect everything else.
         let gestures = arView.installGestures([.rotation, .scale], for: modelEntity)
-        let furnitureWrapper = FurnitureWrapper(entity: modelEntity)
+        let furnitureWrapper = FurnitureWrapper(entity: modelEntity, model: RoomFurnitureModel.allCases.first { $0.resourceName == modelName })
         for wrapper in furnitureWrappers {
             wrapper.isSelected = false
         }
@@ -111,10 +119,7 @@ final class ARSessionManager: NSObject, ObservableObject {
         furnitureWrapper.gestureRecognizers = gestures
         furnitureWrappers.append(furnitureWrapper)
 
-        let infoBox = createInfoBox(for: modelEntity, modelName: modelName)
-        infoBox.position = SIMD3<Float>(0, 0.2, 0)
-        modelEntity.addChild(infoBox)
-
+        usedFurnitureModels = furnitureWrappers.compactMap { $0.model?.resourceName }
         refreshSelectionState()
     }
 
@@ -204,6 +209,25 @@ final class ARSessionManager: NSObject, ObservableObject {
 
     private func refreshSelectionState() {
         selectedMovementMode = furnitureWrappers.first(where: { $0.isSelected })?.movementMode
+    }
+
+    func removeSelected() {
+        guard let index = furnitureWrappers.firstIndex(where: { $0.isSelected }) else { return }
+        let wrapper = furnitureWrappers.remove(at: index)
+        wrapper.gestureRecognizers.forEach { arView.removeGestureRecognizer($0) }
+        wrapper.entity.anchor?.removeFromParent()
+        usedFurnitureModels = furnitureWrappers.compactMap { $0.model?.resourceName }
+        refreshSelectionState()
+    }
+
+    func experience() throws -> RoomExperience {
+        guard let capturedRoom else { throw RoomExperience.ValidationError.invalidScene }
+        let pieces = furnitureWrappers.compactMap { wrapper -> PlacedFurniture? in
+            guard let model = wrapper.model else { return nil }
+            return PlacedFurniture(id: wrapper.instanceID, model: model,
+                                   matrix: wrapper.entity.transformMatrix(relativeTo: nil))
+        }
+        return try RoomExperience(room: capturedRoom, furniture: pieces)
     }
 
     // MARK: - Capture

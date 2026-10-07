@@ -16,20 +16,9 @@ struct PostView: View {
     @State private var showPopUp = false
     @State private var selectedFurniture: VREnvironmentConfig.VRObjectConfig? = nil
 
-    let environment: VREnvironmentConfig
-    let objects: [VREnvironmentConfig.VRObjectConfig]
-
     init(post: Post, showComments: Bool = false) {
-        let postID = post.uuid
-
         self.post = post
-        self.showComments = showComments
-
-        //Firebase call for getting an environment with just the post ID
-        let environments = [VREnvironmentConfig(postID: postID)]
-        environment = environments.first(where: { $0.id == postID}) ?? VREnvironmentConfig(postID: postID)
-
-        objects = environment.objects
+        _showComments = State(initialValue: showComments)
     }
 
     var body: some View {
@@ -72,8 +61,7 @@ struct PostView: View {
                         .padding(.vertical, 10)
 
                         // Full-bleed image — tap to open the AR session.
-                        NavigationLink(destination: ARSessionView2(config: environment)
-                            .ignoresSafeArea()) {
+                        NavigationLink(destination: RoomExperienceView(data: post.sceneData, postID: post.docID)) {
                             ZStack(alignment: .topTrailing) {
                                 PostImage(post: post)
                                     .frame(height: 380)
@@ -83,7 +71,7 @@ struct PostView: View {
                                     .background(Color.appSurface)
                                     .contentShape(Rectangle())
 
-                                Label("View in AR", systemImage: "arkit")
+                                Label(!post.hasScene ? "Photo post" : "Explore room", systemImage: !post.hasScene ? "photo" : "arkit")
                                     .font(AppFont.inter(11, .semibold))
                                     .foregroundColor(.appOnPrimary)
                                     .padding(.horizontal, 10)
@@ -93,6 +81,7 @@ struct PostView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .disabled(!post.hasScene)
 
                         // Action bar
                         HStack(spacing: 18) {
@@ -143,9 +132,16 @@ struct PostView: View {
                             .padding(.top, 6)
 
                         // Featured furniture in this post
-                        FeaturedInPost(objects: objects, showPopUp: $showPopUp, selectedFurniture: $selectedFurniture)
-                            .padding(.top, AppSpacing.lg)
-                            .padding(.bottom, AppSpacing.lg)
+                        if let data = post.sceneData, let experience = try? RoomExperience.decode(data) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Furniture in this room").font(.headline)
+                                ForEach(experience.furniture) { item in
+                                    Text(item.model.title).font(.subheadline)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                        }
                     }
                 }
             }
@@ -163,6 +159,9 @@ struct PostView: View {
                 )
             }
         }
+        .alert("Could not update post", isPresented: Binding(get: { post.actionError != nil }, set: { if !$0 { post.actionError = nil } })) {
+            Button("OK") { post.actionError = nil }
+        } message: { Text(post.actionError ?? "") }
         .toolbar(.hidden, for: .navigationBar)
     }
 

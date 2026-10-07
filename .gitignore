@@ -51,3 +51,6 @@ xcuserdata/
 **/xcshareddata/WorkspaceSettings.xcsettings
  
 # End of https://www.toptal.com/developers/gitignore/api/macos,xcode
+# Local verification tooling
+Tests/Firebase/node_modules/
+**/*-debug.log

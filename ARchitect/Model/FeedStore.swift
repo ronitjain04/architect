@@ -17,9 +17,13 @@ import FirebaseFirestore
 final class FeedStore: ObservableObject {
     @Published private(set) var posts: [Post] = []
     @Published private(set) var isLoading = true
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var canLoadMore = false
+    @Published private(set) var loadingMore = false
+    private var lastDocument: DocumentSnapshot?
+    private var olderPosts: [Post] = []
 
     private var listener: ListenerRegistration?
-    private var didAttemptSeed = false
 
     func start() {
         guard listener == nil, FirebaseApp.app() != nil else {
@@ -28,22 +32,34 @@ final class FeedStore: ObservableObject {
         }
         listener = Firestore.firestore().collection("posts")
             .order(by: "createdAt", descending: true)
-            .addSnapshotListener { [weak self] snapshot, _ in
+            .limit(to: 10)
+            .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     defer { self.isLoading = false }
+                    if let error { self.errorMessage = error.localizedDescription; return }
                     guard let snapshot else { return }
-
-                    self.posts = snapshot.documents.map {
-                        Post(docID: $0.documentID, data: $0.data())
+                    self.errorMessage = nil
+                    let newest = snapshot.documents.map { Post(docID: $0.documentID, data: $0.data()) }
+                    let currentIDs = Set(newest.map(\.id))
+                    // A new head item pushes the previous tenth item out of the live
+                    // window. Retain displaced items so the pagination cursor cannot skip them.
+                    if let boundary = newest.last?.timeAgo {
+                        let knownTailIDs = Set(self.olderPosts.map(\.id))
+                        let displaced = self.posts.filter {
+                            !currentIDs.contains($0.id) && !knownTailIDs.contains($0.id) && $0.timeAgo <= boundary
+                        }
+                        self.olderPosts += displaced
+                    }
+                    self.olderPosts = self.olderPosts.filter { !currentIDs.contains($0.id) }
+                        .sorted { $0.timeAgo > $1.timeAgo }
+                    self.posts = newest + self.olderPosts
+                    if self.olderPosts.isEmpty {
+                        self.lastDocument = snapshot.documents.last
+                        self.canLoadMore = snapshot.documents.count == 10
                     }
 
-                    #if DEBUG
-                    if snapshot.documents.isEmpty, !self.didAttemptSeed {
-                        self.didAttemptSeed = true
-                        self.seedSamplePosts()
-                    }
-                    #endif
+
                 }
             }
     }
@@ -55,6 +71,10 @@ final class FeedStore: ObservableObject {
         listener?.remove()
         listener = nil
         isLoading = true
+        olderPosts = []
+        posts = []
+        lastDocument = nil
+        canLoadMore = false
         start()
     }
 
@@ -62,6 +82,25 @@ final class FeedStore: ObservableObject {
         listener?.remove()
         listener = nil
         posts = []
+        olderPosts = []
+        lastDocument = nil
+    }
+
+    func loadMore() async {
+        guard let lastDocument, canLoadMore, !loadingMore else { return }
+        loadingMore = true
+        defer { loadingMore = false }
+        do {
+            let snapshot = try await Firestore.firestore().collection("posts")
+                .order(by: "createdAt", descending: true).start(afterDocument: lastDocument)
+                .limit(to: 10).getDocuments()
+            let ids = Set(posts.map(\.id))
+            let additional = snapshot.documents.map { Post(docID: $0.documentID, data: $0.data()) }.filter { !ids.contains($0.id) }
+            olderPosts += additional
+            posts += additional
+            self.lastDocument = snapshot.documents.last
+            canLoadMore = snapshot.documents.count == 10
+        } catch { errorMessage = error.localizedDescription }
     }
 
     deinit {
@@ -94,29 +133,49 @@ final class FeedStore: ObservableObject {
         title: String,
         description: String,
         furniture: [String],
+        experience: RoomExperience? = nil,
         username: String
     ) async throws {
         guard let uid = Auth.auth().currentUser?.uid else {
             throw CreatePostError.notSignedIn
         }
         let data = try compressedImageData(from: image)
-
-        try await Firestore.firestore().collection("posts").addDocument(data: [
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, trimmedTitle.count <= 100, description.count <= 2000 else {
+            throw PostInputError.invalidText
+        }
+        var fields: [String: Any] = [
             "authorUid": uid,
             "username": username,
-            "title": title,
+            "title": trimmedTitle,
             "description": description,
             "imageData": data,
             "furnitureModels": furniture,
             "createdAt": FieldValue.serverTimestamp(),
             "likedBy": [],
             "commentCount": 0,
-        ])
+        ]
+        let db = Firestore.firestore()
+        let ref = db.collection("posts").document()
+        let batch = db.batch()
+        if let experience {
+            _ = try experience.validatedRoom()
+            fields["hasScene"] = true
+            batch.setData(["sceneData": try experience.encoded()],
+                          forDocument: ref.collection("experience").document("scene"))
+        }
+        batch.setData(fields, forDocument: ref)
+        try await batch.commit()
+    }
+
+    enum PostInputError: LocalizedError {
+        case invalidText
+        var errorDescription: String? { "Use a title of 1–100 characters and a caption of at most 2,000 characters." }
     }
 
     /// Resizes to feed size and walks JPEG quality down until the bytes fit
     /// comfortably inside Firestore's 1 MB document limit.
-    private static func compressedImageData(from image: UIImage, maxDimension: CGFloat = 800) throws -> Data {
+    private static func compressedImageData(from image: UIImage, maxDimension: CGFloat = 640) throws -> Data {
         let largestSide = max(image.size.width, image.size.height)
         let scale = min(1, maxDimension / max(largestSide, 1))
         let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
@@ -128,40 +187,11 @@ final class FeedStore: ObservableObject {
         }
 
         for quality in [0.7, 0.5, 0.35, 0.2] {
-            if let data = resized.jpegData(compressionQuality: quality), data.count < 850_000 {
+            if let data = resized.jpegData(compressionQuality: quality), data.count < 150_000 {
                 return data
             }
         }
         throw CreatePostError.imageEncoding
     }
 
-    #if DEBUG
-    /// One-time demo content so a fresh database still shows a feed.
-    private func seedSamplePosts() {
-        let samples: [(username: String, title: String, asset: String, description: String, hoursAgo: Double)] = [
-            ("ronit", "1990 Vintage", "ar_room1", "Bold interior design project that revives the vibrant energy of the early '80s. It marries vivid color schemes, geometric patterns, and nostalgic accents with contemporary comforts.", 2),
-            ("bob", "Virtual Office", "ar_room2", "Reimagined my home office in AR before buying a single piece — the desk placement made all the difference.", 5),
-            ("sam", "Sunlit Corner", "ar_room3", "My own room with amazing lighting and furniture. Explore how I have transformed my space.", 9),
-            ("paul", "Reading Nook", "ar_room4", "Tried three different armchairs in AR and kept the one that fit the corner best.", 14),
-            ("maya", "Warm Minimal", "ar_room5", "Less furniture, more light. AR made it easy to see what to remove.", 20),
-            ("steven", "Cozy Loft", "ar_room6", "My own room with amazing lighting and furniture. Explore how I have transformed my space.", 28),
-            ("ana", "Gallery Wall", "ar_room7", "Previewed the whole gallery wall in AR before hammering a single nail.", 36),
-        ]
-
-        let db = Firestore.firestore()
-        let seederUid = Auth.auth().currentUser?.uid ?? "seed"
-        for sample in samples {
-            db.collection("posts").addDocument(data: [
-                "authorUid": seederUid,
-                "username": sample.username,
-                "title": sample.title,
-                "description": sample.description,
-                "imageAsset": sample.asset,
-                "createdAt": Timestamp(date: Date().addingTimeInterval(-sample.hoursAgo * 3600)),
-                "likedBy": [],
-                "commentCount": 0,
-            ])
-        }
-    }
-    #endif
 }

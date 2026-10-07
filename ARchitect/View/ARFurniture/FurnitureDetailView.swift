@@ -69,13 +69,14 @@ struct FurnitureDetailView: View {
                     Label("View in AR", systemImage: "arkit")
                 }
                 .buttonStyle(PrimaryButtonStyle())
+                .disabled(item.model == nil)
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.top, AppSpacing.sm)
                 .padding(.bottom, AppSpacing.md)
             }
         }
         .fullScreenCover(isPresented: $showAR) {
-            FurnitureTryOutView()
+            if let model = item.model { FurnitureTryOutView(model: model) }
         }
         .toolbar(.hidden, for: .navigationBar)
     }

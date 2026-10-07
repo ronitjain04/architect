@@ -1,63 +1,136 @@
 rules_version = '2';
-
-// ARchitect Firestore rules
-// - Everything requires a signed-in user.
-// - Users own their profile document.
-// - Posts: author-only edits/deletes; any signed-in user may toggle likes
-//   (likedBy) or bump the denormalized comment counter.
-// - Comments: attributed to their author; author-only deletes.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function ownUsername() { return get(/databases/$(database)/documents/users/$(me())).data.username; }
+    function validPost(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 100
+        && data.description is string && data.description.size() <= 2000
+        && (!('imageData' in data) || (data.imageData is bytes && data.imageData.size() <= 500000))
+        && (!('sceneData' in data) || (data.sceneData is bytes && data.sceneData.size() <= 300000));
     }
-
+    match /usernames/{name} {
+      allow read: if signedIn();
+      allow create: if signedIn() && name.matches('[a-z0-9_]{3,30}')
+        && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == me()
+        && getAfter(/databases/$(database)/documents/users/$(me())).data.username == name
+        && !exists(/databases/$(database)/documents/users/$(me()));
+      allow update, delete: if false;
+    }
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
-
+      allow read: if signedIn();
+      allow create: if signedIn() && me() == userId
+        && request.resource.data.username.matches('[a-z0-9_]{3,30}')
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == me();
+      allow update: if signedIn() && me() == userId
+        && request.resource.data.username == resource.data.username
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'bio', 'savedPosts', 'following', 'blockedUIDs'])
+        && (!('displayName' in request.resource.data) || request.resource.data.displayName.size() <= 100)
+        && (!('bio' in request.resource.data) || request.resource.data.bio.size() <= 500)
+        && (!('savedPosts' in request.resource.data) || request.resource.data.savedPosts.size() <= 500)
+        && (!('following' in request.resource.data) || request.resource.data.following.size() <= 500)
+        && (!('blockedUIDs' in request.resource.data) || (request.resource.data.blockedUIDs is list && request.resource.data.blockedUIDs.size() <= 500));
+      // Account erasure must also clean dependent content; direct profile deletion
+      // would allow repeated handle reservations without deleting the auth account.
+      allow delete: if false;
       match /notifications/{notifId} {
-        allow read: if isSignedIn() && request.auth.uid == userId;
-
-        allow create: if isSignedIn()
-          && request.resource.data.actorUsername is string
-          && request.resource.data.type in ['like', 'comment', 'follow'];
-
-        allow update: if isSignedIn() && request.auth.uid == userId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-
-        allow delete: if isSignedIn();
+        function validSource(data) {
+          return (data.type == 'like'
+              && notifId == 'like_' + data.postID + '_' + me()
+              && get(/databases/$(database)/documents/posts/$(data.postID)).data.authorUid == userId
+              && me() in get(/databases/$(database)/documents/posts/$(data.postID)).data.likedBy)
+            || (data.type == 'comment'
+              && notifId == 'comment_' + data.postID + '_' + data.commentID
+              && get(/databases/$(database)/documents/posts/$(data.postID)).data.authorUid == userId
+              && get(/databases/$(database)/documents/posts/$(data.postID)/comments/$(data.commentID)).data.authorUid == me())
+            || (data.type == 'follow' && notifId == 'follow_' + me()
+              && get(/databases/$(database)/documents/users/$(userId)).data.username in get(/databases/$(database)/documents/users/$(me())).data.following);
+        }
+        allow read: if signedIn() && me() == userId;
+        allow create: if signedIn() && userId != me()
+          && request.resource.data.keys().hasOnly(['actorUid','actorUsername','type','postID','commentID','read','createdAt'])
+          && request.resource.data.actorUid == me() && request.resource.data.actorUsername == ownUsername()
+          && request.resource.data.read == false && request.resource.data.createdAt == request.time
+          && (!('blockedUIDs' in get(/databases/$(database)/documents/users/$(userId)).data)
+            || !(me() in get(/databases/$(database)/documents/users/$(userId)).data.blockedUIDs))
+          && validSource(request.resource.data);
+        allow update: if signedIn() && me() == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read is bool;
+        allow delete: if signedIn() && (me() == userId || resource.data.actorUid == me());
       }
     }
-
+    match /reports/{reportId} {
+      allow read, update, delete: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['reporterUid','postID','authorUid','reason','createdAt'])
+        && request.resource.data.reporterUid == me()
+        && request.resource.data.postID is string
+        && request.resource.data.authorUid is string
+        && request.resource.data.reason in ['Harassment','Inappropriate content','Spam','Other']
+        && request.resource.data.createdAt == request.time
+        && get(/databases/$(database)/documents/posts/$(request.resource.data.postID)).data.authorUid == request.resource.data.authorUid;
+    }
+    match /deletionRequests/{userId} {
+      allow read: if signedIn() && me() == userId;
+      allow create: if signedIn() && me() == userId
+        && request.resource.data.keys().hasOnly(['uid','status','createdAt'])
+        && request.resource.data.uid == me()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
     match /posts/{postId} {
-      allow read: if isSignedIn();
-
-      allow create: if isSignedIn()
-        && request.resource.data.authorUid == request.auth.uid
-        && request.resource.data.username is string
-        && request.resource.data.title is string
-        && request.resource.data.description is string;
-
-      allow update: if isSignedIn() && (
-        resource.data.authorUid == request.auth.uid
-        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy'])
-        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
-      );
-
-      allow delete: if isSignedIn() && resource.data.authorUid == request.auth.uid;
-
-      match /comments/{commentId} {
-        allow read: if isSignedIn();
-
-        allow create: if isSignedIn()
-          && request.resource.data.authorUid == request.auth.uid
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 2000;
-
+      function ownLikeOnly() {
+        let old = resource.data.likedBy.toSet();
+        let next = request.resource.data.likedBy.toSet();
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy'])
+          && request.resource.data.likedBy is list && request.resource.data.likedBy.size() <= 1000
+          && next.size() == request.resource.data.likedBy.size()
+          && next.difference(old).hasOnly([me()]) && old.difference(next).hasOnly([me()]);
+      }
+      function newCommentCounter() {
+        let id = request.resource.data.lastCommentID;
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount','lastCommentID'])
+          && id is string && id.matches('[a-zA-Z0-9_-]{1,100}')
+          && request.resource.data.commentCount == resource.data.commentCount + 1
+          && !exists(/databases/$(database)/documents/posts/$(postId)/comments/$(id))
+          && getAfter(/databases/$(database)/documents/posts/$(postId)/comments/$(id)).data.authorUid == me();
+      }
+      allow read: if signedIn();
+      allow create: if signedIn() && validPost(request.resource.data)
+        && request.resource.data.keys().hasOnly(['authorUid','username','title','description','imageData','sceneData','furnitureModels','createdAt','likedBy','commentCount','hasScene'])
+        && request.resource.data.authorUid == me() && request.resource.data.username == ownUsername()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.likedBy == [] && request.resource.data.commentCount == 0;
+      allow update: if signedIn() && (
+        (resource.data.authorUid == me()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title','description'])
+          && validPost(request.resource.data)) || ownLikeOnly() || newCommentCounter());
+      allow delete: if signedIn() && resource.data.authorUid == me();
+      match /experience/{experienceId} {
+        allow read: if signedIn() && exists(/databases/$(database)/documents/posts/$(postId));
+        allow create: if signedIn() && experienceId == 'scene'
+          && getAfter(/databases/$(database)/documents/posts/$(postId)).data.authorUid == me()
+          && getAfter(/databases/$(database)/documents/posts/$(postId)).data.hasScene == true
+          && request.resource.data.keys().hasOnly(['sceneData'])
+          && request.resource.data.sceneData is bytes && request.resource.data.sceneData.size() <= 300000;
         allow update: if false;
-        allow delete: if isSignedIn() && resource.data.authorUid == request.auth.uid;
+        allow delete: if signedIn() && get(/databases/$(database)/documents/posts/$(postId)).data.authorUid == me();
+      }
+      match /comments/{commentId} {
+        allow read: if signedIn() && exists(/databases/$(database)/documents/posts/$(postId));
+        allow create: if signedIn() && exists(/databases/$(database)/documents/posts/$(postId))
+          && request.resource.data.keys().hasOnly(['authorUid','publisher','text','timestamp'])
+          && request.resource.data.authorUid == me() && request.resource.data.publisher == ownUsername()
+          && request.resource.data.timestamp == request.time
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
+          && getAfter(/databases/$(database)/documents/posts/$(postId)).data.lastCommentID == commentId
+          && getAfter(/databases/$(database)/documents/posts/$(postId)).data.commentCount == get(/databases/$(database)/documents/posts/$(postId)).data.commentCount + 1;
+        allow update: if false;
+        allow delete: if signedIn() && (resource.data.authorUid == me()
+          || get(/databases/$(database)/documents/posts/$(postId)).data.authorUid == me());
       }
     }
   }

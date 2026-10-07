@@ -7,6 +7,7 @@
 import SwiftUI
 
 struct FurnitureItem: Identifiable {
+    var model: RoomFurnitureModel? { RoomFurnitureModel.allCases.first { $0.title == name } }
     let id = UUID()
     let name: String
     let tags: [String]
