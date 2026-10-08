@@ -14,6 +14,24 @@ import RealityKit
 import UIKit
 import RoomPlan
 
+enum FurnitureDragMath {
+    static func horizontalTarget(anchorAtStart: SIMD3<Float>, hitAtStart: SIMD3<Float>,
+                                 currentHit: SIMD3<Float>) -> SIMD3<Float> {
+        anchorAtStart + currentHit - hitAtStart
+    }
+
+    static func verticalMetersPerPoint(depth: Float, viewportHeight: Float) -> Float {
+        guard viewportHeight > 0 else { return 0 }
+        // Approximate the camera's vertical field of view (60 degrees).
+        return 2 * max(depth, 0.1) * tan(.pi / 6) / viewportHeight
+    }
+
+    static func verticalTarget(startHeight: Float, fingerDeltaY: Float,
+                               metersPerPoint: Float) -> Float {
+        startHeight - fingerDeltaY * metersPerPoint
+    }
+}
+
 final class ARSessionManager: NSObject, ObservableObject {
     let arView = ARView(frame: .zero)
     var capturedRoom: CapturedRoom?
@@ -29,6 +47,15 @@ final class ARSessionManager: NSObject, ObservableObject {
     private(set) var usedFurnitureModels: [String] = []
     private var furnitureWrappers: [FurnitureWrapper] = []
     private var gesturesAttached = false
+    private struct PanContext {
+        let wrapper: FurnitureWrapper
+        let anchor: AnchorEntity
+        let anchorAtStart: SIMD3<Float>
+        let fingerAtStart: CGPoint
+        let hitAtStart: SIMD3<Float>?
+        let metersPerPoint: Float
+    }
+    private var panContext: PanContext?
 
     // MARK: - Session lifecycle
 
@@ -183,22 +210,49 @@ final class ARSessionManager: NSObject, ObservableObject {
         refreshSelectionState()
     }
 
-    /// Pan moves the selected, unlocked piece along the floor plane (or
-    /// vertically, depending on its movement mode).
+    /// Keep the grabbed point beneath the finger on the furniture's floor
+    /// plane. A world-space ray/plane intersection avoids camera-relative
+    /// reversals and arbitrary pixel-to-meter multipliers.
     @objc private func handlePanGesture(_ sender: UIPanGestureRecognizer) {
-        guard let wrapper = furnitureWrappers.first(where: { $0.isSelected && !$0.isLocked }) else { return }
-
-        let translation = sender.translation(in: arView)
-        sender.setTranslation(.zero, in: arView)
-
-        var position = wrapper.entity.position
-        if wrapper.movementMode == .vertical {
-            position.y += Float(translation.y) * -0.007
-        } else {
-            position.x += Float(translation.x) * 0.007
-            position.z += Float(translation.y) * 0.007
+        let finger = sender.location(in: arView)
+        switch sender.state {
+        case .began:
+            guard let wrapper = furnitureWrappers.first(where: { $0.isSelected && !$0.isLocked }),
+                  let anchor = wrapper.entity.anchor as? AnchorEntity else { return }
+            let start = anchor.position(relativeTo: nil)
+            let distance = simd_distance(arView.cameraTransform.translation, start)
+            panContext = PanContext(wrapper: wrapper, anchor: anchor,
+                                    anchorAtStart: start, fingerAtStart: finger,
+                                    hitAtStart: floorHit(at: finger, height: start.y),
+                                    metersPerPoint: FurnitureDragMath.verticalMetersPerPoint(
+                                        depth: distance, viewportHeight: Float(arView.bounds.height)))
+        case .changed:
+            guard let context = panContext, !context.wrapper.isLocked else { return }
+            if context.wrapper.movementMode == .vertical {
+                var position = context.anchorAtStart
+                position.y = FurnitureDragMath.verticalTarget(
+                    startHeight: position.y,
+                    fingerDeltaY: Float(finger.y - context.fingerAtStart.y),
+                    metersPerPoint: context.metersPerPoint)
+                context.anchor.setPosition(position, relativeTo: nil)
+            } else if let initialHit = context.hitAtStart,
+                      let currentHit = floorHit(at: finger, height: context.anchorAtStart.y) {
+                let target = FurnitureDragMath.horizontalTarget(
+                    anchorAtStart: context.anchorAtStart,
+                    hitAtStart: initialHit, currentHit: currentHit)
+                context.anchor.setPosition(target, relativeTo: nil)
+            }
+        case .ended, .cancelled, .failed:
+            panContext = nil
+        default:
+            break
         }
-        wrapper.entity.position = position
+    }
+
+    private func floorHit(at point: CGPoint, height: Float) -> SIMD3<Float>? {
+        var plane = matrix_identity_float4x4
+        plane.columns.3.y = height
+        return arView.unproject(point, ontoPlane: plane)
     }
 
     func toggleMovementMode() {

@@ -43,4 +43,24 @@ struct ARchitectTests {
             #expect(bounds.max.y > bounds.min.y)
         }
     }
+
+    @Test func horizontalDragKeepsTheGrabPointUnderTheFinger() {
+        let target = FurnitureDragMath.horizontalTarget(
+            anchorAtStart: SIMD3<Float>(1, 0, 2),
+            hitAtStart: SIMD3<Float>(1.2, 0, 2.3),
+            currentHit: SIMD3<Float>(1.4, 0, 1.8))
+        #expect(abs(target.x - 1.2) < 0.0001)
+        #expect(target.y == 0)
+        #expect(abs(target.z - 1.5) < 0.0001)
+    }
+
+    @Test func verticalDragTracksScreenMotionAtTheObjectsDepth() {
+        let metersPerPoint = FurnitureDragMath.verticalMetersPerPoint(depth: 2, viewportHeight: 800)
+        #expect(metersPerPoint > 0.002)
+        #expect(metersPerPoint < 0.004)
+        let target = FurnitureDragMath.verticalTarget(startHeight: 0.5, fingerDeltaY: -100,
+                                                      metersPerPoint: metersPerPoint)
+        #expect(target > 0.7)
+        #expect(target < 0.9)
+    }
 }

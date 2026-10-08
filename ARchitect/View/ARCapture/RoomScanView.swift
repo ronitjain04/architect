@@ -14,12 +14,16 @@ struct RoomScanView: View {
     @State private var errorMessage: String?
     @State private var captureView: RoomCaptureView?
     @State private var scanID = UUID()
+    @State private var detectedWalls = 0
+    @State private var guidance = "Point at a well-lit wall and move slowly."
 
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
             if RoomCaptureSession.isSupported && cameraAllowed {
-                Scanner(session: session, view: $captureView) { result in
+                Scanner(session: session, view: $captureView,
+                        onProgress: { detectedWalls = $0 },
+                        onGuidance: { guidance = $0 }) { result in
                     isProcessing = false
                     switch result {
                     case .success(let room): onScanned(room)
@@ -57,10 +61,14 @@ struct RoomScanView: View {
                     Button("Scan again") {
                         self.errorMessage = nil
                         captureView = nil
+                        detectedWalls = 0
+                        guidance = "Point at a well-lit wall and move slowly."
                         scanID = UUID()
                     }.buttonStyle(.borderedProminent)
                 } else {
-                    Text("Move slowly to capture every wall, door, and window. Tap Done when the room is complete.")
+                    Text(detectedWalls == 0
+                         ? "\(guidance) No walls detected yet."
+                         : "\(detectedWalls) wall\(detectedWalls == 1 ? "" : "s") detected. \(guidance) Tap Done when the room is complete.")
                         .multilineTextAlignment(.center).padding()
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                 }
@@ -86,12 +94,22 @@ struct RoomScanView: View {
 private struct Scanner: UIViewRepresentable {
     let session: ARSession
     @Binding var view: RoomCaptureView?
+    let onProgress: (Int) -> Void
+    let onGuidance: (String) -> Void
     let completion: (Result<CapturedRoom, Error>) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(completion: completion) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onProgress: onProgress, onGuidance: onGuidance, completion: completion)
+    }
     func makeUIView(context: Context) -> RoomCaptureView {
+        // RoomPlan requires a supplied ARSession to already be running with
+        // ARWorldTrackingConfiguration before creating RoomCaptureView.
+        let configuration = ARWorldTrackingConfiguration()
+        configuration.planeDetection = [.horizontal, .vertical]
+        session.run(configuration)
         let capture = RoomCaptureView(frame: .zero, arSession: session)
         capture.delegate = context.coordinator
+        capture.captureSession.delegate = context.coordinator
         capture.captureSession.run(configuration: .init())
         DispatchQueue.main.async { view = capture }
         return capture
@@ -99,14 +117,22 @@ private struct Scanner: UIViewRepresentable {
     func updateUIView(_ uiView: RoomCaptureView, context: Context) {}
     static func dismantleUIView(_ uiView: RoomCaptureView, coordinator: Coordinator) {
         uiView.captureSession.stop(pauseARSession: false)
+        uiView.captureSession.delegate = nil
         uiView.delegate = nil
     }
 
     @objc(ARchitectRoomScanCoordinator)
-    final class Coordinator: NSObject, RoomCaptureViewDelegate {
+    final class Coordinator: NSObject, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
+        let onProgress: (Int) -> Void
+        let onGuidance: (String) -> Void
         let completion: (Result<CapturedRoom, Error>) -> Void
         private var delivered = false
-        init(completion: @escaping (Result<CapturedRoom, Error>) -> Void) { self.completion = completion }
+        init(onProgress: @escaping (Int) -> Void, onGuidance: @escaping (String) -> Void,
+             completion: @escaping (Result<CapturedRoom, Error>) -> Void) {
+            self.onProgress = onProgress
+            self.onGuidance = onGuidance
+            self.completion = completion
+        }
         required init?(coder: NSCoder) { nil }
         func encode(with coder: NSCoder) {}
         func finish(_ result: Result<CapturedRoom, Error>) {
@@ -126,6 +152,25 @@ private struct Scanner: UIViewRepresentable {
                     finish(.success(processedResult))
                 } catch { finish(.failure(error)) }
             }
+        }
+        func captureSession(_ session: RoomCaptureSession, didUpdate room: CapturedRoom) {
+            DispatchQueue.main.async { self.onProgress(room.walls.count) }
+        }
+        func captureSession(_ session: RoomCaptureSession, didProvide instruction: RoomCaptureSession.Instruction) {
+            let message: String
+            switch instruction {
+            case .moveCloseToWall: message = "Move closer to a wall."
+            case .moveAwayFromWall: message = "Move farther from the wall."
+            case .slowDown: message = "Move your phone more slowly."
+            case .turnOnLight: message = "Turn on more lights."
+            case .lowTexture: message = "Aim at a corner or textured surface."
+            case .normal: message = "Keep scanning the walls and floor."
+            @unknown default: message = "Move slowly around the room."
+            }
+            DispatchQueue.main.async { self.onGuidance(message) }
+        }
+        func captureSession(_ session: RoomCaptureSession, didEndWith data: CapturedRoomData, error: Error?) {
+            if let error { finish(.failure(error)) }
         }
     }
 }
