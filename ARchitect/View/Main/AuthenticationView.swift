@@ -86,11 +86,13 @@ struct AuthenticationView: View {
                         session.signInWithGoogle()
                     }
 
+                    #if !LOCAL_PERSONAL_TEAM
                     SignInWithAppleButton(.signIn, onRequest: startAppleSignIn, onCompletion: finishAppleSignIn)
                         .signInWithAppleButtonStyle(.black)
                         .frame(height: 48)
                         .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
                         .padding(.top, AppSpacing.sm)
+                    #endif
 
                     Spacer()
 
