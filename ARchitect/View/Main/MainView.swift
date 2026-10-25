@@ -44,6 +44,9 @@ struct MainView: View {
             .fullScreenCover(item: $sharedPost) { post in
                 NavigationStack { PostView(post: post) }.environmentObject(session)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .ownPostDeleted)) { _ in
+                sharedPost = nil
+            }
             // App-wide Inter default typography + tint.
             .font(AppFont.body)
             .tint(.appPrimary)

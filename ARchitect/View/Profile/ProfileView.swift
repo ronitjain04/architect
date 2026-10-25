@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var session: SessionStore
+    var refreshID = 0
     @State private var selectedSection: ProfileSection = .posts
     @State private var showEditProfile = false
     @State private var showARCamera = false
@@ -67,7 +68,8 @@ struct ProfileView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task(id: session.profile?.username) { await reload() }
+        .task(id: "\(session.profile?.username ?? "")-\(refreshID)") { await reload() }
+        .onChange(of: refreshID) { _, _ in selectedSection = .posts }
         .onChange(of: session.savedPostIDs) {
             Task { savedPosts = await SocialService.fetchPosts(ids: Array(session.savedPostIDs)) }
         }
