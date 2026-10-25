@@ -44,14 +44,21 @@ struct ARchitectTests {
         }
     }
 
-    @Test func horizontalDragKeepsTheGrabPointUnderTheFinger() {
-        let target = FurnitureDragMath.horizontalTarget(
+    @Test func horizontalDragFollowsScreenDirectionsAtAStableSpeed() {
+        let target = FurnitureDragMath.screenAlignedTarget(
             anchorAtStart: SIMD3<Float>(1, 0, 2),
-            hitAtStart: SIMD3<Float>(1.2, 0, 2.3),
-            currentHit: SIMD3<Float>(1.4, 0, 1.8))
-        #expect(abs(target.x - 1.2) < 0.0001)
+            fingerDelta: CGPoint(x: 100, y: -100),
+            cameraTransform: matrix_identity_float4x4,
+            metersPerPoint: 0.003)
+        #expect(abs(target.x - 1.3) < 0.0001)
         #expect(target.y == 0)
-        #expect(abs(target.z - 1.5) < 0.0001)
+        #expect(abs(target.z - 1.7) < 0.0001)
+        let longDrag = FurnitureDragMath.screenAlignedTarget(
+            anchorAtStart: SIMD3<Float>(1, 0, 2),
+            fingerDelta: CGPoint(x: 1000, y: -1000),
+            cameraTransform: matrix_identity_float4x4,
+            metersPerPoint: 0.003)
+        #expect(simd_distance(longDrag, SIMD3<Float>(1, 0, 2)) <= 0.6001)
     }
 
     @Test func verticalDragTracksScreenMotionAtTheObjectsDepth() {

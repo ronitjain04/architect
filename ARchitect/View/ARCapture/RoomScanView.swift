@@ -2,6 +2,7 @@ import SwiftUI
 import RoomPlan
 import ARKit
 import AVFoundation
+import SceneKit
 
 struct RoomScanView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -16,17 +17,27 @@ struct RoomScanView: View {
     @State private var scanID = UUID()
     @State private var detectedWalls = 0
     @State private var guidance = "Point at a well-lit wall and move slowly."
+    @State private var scannedRoom: CapturedRoom?
+    @State private var previewScene: SCNScene?
 
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
-            if RoomCaptureSession.isSupported && cameraAllowed {
+            if let previewScene {
+                SceneView(scene: previewScene, options: [.allowsCameraControl, .autoenablesDefaultLighting])
+                    .ignoresSafeArea()
+            } else if RoomCaptureSession.isSupported && cameraAllowed {
                 Scanner(session: session, view: $captureView,
                         onProgress: { detectedWalls = $0 },
                         onGuidance: { guidance = $0 }) { result in
                     isProcessing = false
                     switch result {
-                    case .success(let room): onScanned(room)
+                    case .success(let room):
+                        do {
+                            let experience = try RoomExperience(room: room, furniture: [])
+                            previewScene = try experience.makeScene()
+                            scannedRoom = room
+                        } catch { errorMessage = error.localizedDescription }
                     case .failure(let error): errorMessage = error.localizedDescription
                     }
                 }
@@ -39,11 +50,15 @@ struct RoomScanView: View {
                     Spacer()
                     Text("Scan your room").font(.headline)
                     Spacer()
-                    Button("Done") {
-                        isProcessing = true
-                        captureView?.captureSession.stop(pauseARSession: false)
+                    if let scannedRoom {
+                        Button("Use room") { onScanned(scannedRoom) }
+                    } else {
+                        Button("Done") {
+                            isProcessing = true
+                            captureView?.captureSession.stop(pauseARSession: false)
+                        }
+                        .disabled(captureView == nil || detectedWalls == 0 || isProcessing || errorMessage != nil)
                     }
-                    .disabled(captureView == nil || isProcessing || errorMessage != nil)
                 }
                 .padding().background(.regularMaterial)
                 Spacer()
@@ -54,17 +69,21 @@ struct RoomScanView: View {
                     Button("Open Settings") {
                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                     }
+                } else if scannedRoom != nil {
+                    VStack(spacing: 10) {
+                        Text("Your room is ready")
+                            .font(.headline)
+                        Text("Drag to inspect the scan. Pinch to zoom, then tap Use room to add furniture.")
+                            .multilineTextAlignment(.center)
+                        Button("Scan again") { resetScan() }
+                            .buttonStyle(.bordered)
+                    }
+                    .padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                 } else if isProcessing {
                     ProgressView("Building your room…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                 } else if let errorMessage {
                     Text(errorMessage).padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    Button("Scan again") {
-                        self.errorMessage = nil
-                        captureView = nil
-                        detectedWalls = 0
-                        guidance = "Point at a well-lit wall and move slowly."
-                        scanID = UUID()
-                    }.buttonStyle(.borderedProminent)
+                    Button("Scan again") { resetScan() }.buttonStyle(.borderedProminent)
                 } else {
                     Text(detectedWalls == 0
                          ? "\(guidance) No walls detected yet."
@@ -88,6 +107,16 @@ struct RoomScanView: View {
             cameraAllowed = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
         }
         cameraChecked = true
+    }
+
+    private func resetScan() {
+        errorMessage = nil
+        scannedRoom = nil
+        previewScene = nil
+        captureView = nil
+        detectedWalls = 0
+        guidance = "Point at a well-lit wall and move slowly."
+        scanID = UUID()
     }
 }
 

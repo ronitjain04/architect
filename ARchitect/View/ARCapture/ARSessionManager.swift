@@ -15,15 +15,32 @@ import UIKit
 import RoomPlan
 
 enum FurnitureDragMath {
-    static func horizontalTarget(anchorAtStart: SIMD3<Float>, hitAtStart: SIMD3<Float>,
-                                 currentHit: SIMD3<Float>) -> SIMD3<Float> {
-        anchorAtStart + currentHit - hitAtStart
-    }
-
     static func verticalMetersPerPoint(depth: Float, viewportHeight: Float) -> Float {
         guard viewportHeight > 0 else { return 0 }
         // Approximate the camera's vertical field of view (60 degrees).
-        return 2 * max(depth, 0.1) * tan(.pi / 6) / viewportHeight
+        return 2 * min(max(depth, 0.1), 3) * tan(.pi / 6) / viewportHeight
+    }
+
+    static func screenAlignedTarget(anchorAtStart: SIMD3<Float>, fingerDelta: CGPoint,
+                                    cameraTransform: simd_float4x4,
+                                    metersPerPoint: Float) -> SIMD3<Float> {
+        let cameraRight = cameraTransform.columns.0
+        let cameraForward = cameraTransform.columns.2
+        let cameraUp = cameraTransform.columns.1
+        let right = simd_normalize(SIMD3<Float>(cameraRight.x, 0, cameraRight.z))
+        var forward = SIMD3<Float>(-cameraForward.x, 0, -cameraForward.z)
+        if simd_length_squared(forward) < 0.01 {
+            forward = SIMD3<Float>(cameraUp.x, 0, cameraUp.z)
+        }
+        forward = simd_normalize(forward)
+        let movement = right * Float(fingerDelta.x) * metersPerPoint
+            - forward * Float(fingerDelta.y) * metersPerPoint
+        // A near-horizontal camera can make projected depth feel exaggerated.
+        // Keep one continuous drag within reach; the next drag can continue.
+        let limited = simd_length(movement) > 0.6
+            ? simd_normalize(movement) * 0.6 : movement
+        return anchorAtStart
+            + limited
     }
 
     static func verticalTarget(startHeight: Float, fingerDeltaY: Float,
@@ -49,10 +66,10 @@ final class ARSessionManager: NSObject, ObservableObject {
     private var gesturesAttached = false
     private struct PanContext {
         let wrapper: FurnitureWrapper
-        let anchor: AnchorEntity
-        let anchorAtStart: SIMD3<Float>
+        let worldAtStart: SIMD3<Float>
+        let localAtStart: SIMD3<Float>
         let fingerAtStart: CGPoint
-        let hitAtStart: SIMD3<Float>?
+        let cameraTransform: simd_float4x4
         let metersPerPoint: Float
     }
     private var panContext: PanContext?
@@ -136,7 +153,7 @@ final class ARSessionManager: NSObject, ObservableObject {
         arView.scene.anchors.append(anchor)
 
         // Select the new piece; deselect everything else.
-        let gestures = arView.installGestures([.rotation, .scale], for: modelEntity)
+        let gestures = arView.installGestures([.rotation], for: modelEntity)
         let furnitureWrapper = FurnitureWrapper(entity: modelEntity, model: RoomFurnitureModel.allCases.first { $0.resourceName == modelName })
         for wrapper in furnitureWrappers {
             wrapper.isSelected = false
@@ -204,55 +221,52 @@ final class ARSessionManager: NSObject, ObservableObject {
             tappedWrapper.gestureRecognizers.removeAll()
         } else {
             tappedWrapper.isLocked = false
-            tappedWrapper.gestureRecognizers = arView.installGestures([.rotation, .scale], for: tappedWrapper.entity)
+            tappedWrapper.gestureRecognizers = arView.installGestures([.rotation], for: tappedWrapper.entity)
         }
 
         refreshSelectionState()
     }
 
-    /// Keep the grabbed point beneath the finger on the furniture's floor
-    /// plane. A world-space ray/plane intersection avoids camera-relative
-    /// reversals and arbitrary pixel-to-meter multipliers.
+    /// Move in camera-aligned ground directions at the furniture's depth.
+    /// A floor-plane intersection becomes unstable near the horizon, making
+    /// a small finger motion send furniture far away or fail entirely.
     @objc private func handlePanGesture(_ sender: UIPanGestureRecognizer) {
         let finger = sender.location(in: arView)
         switch sender.state {
         case .began:
-            guard let wrapper = furnitureWrappers.first(where: { $0.isSelected && !$0.isLocked }),
-                  let anchor = wrapper.entity.anchor as? AnchorEntity else { return }
-            let start = anchor.position(relativeTo: nil)
+            guard let wrapper = furnitureWrappers.first(where: { $0.isSelected && !$0.isLocked }) else { return }
+            let start = wrapper.entity.position(relativeTo: nil)
             let distance = simd_distance(arView.cameraTransform.translation, start)
-            panContext = PanContext(wrapper: wrapper, anchor: anchor,
-                                    anchorAtStart: start, fingerAtStart: finger,
-                                    hitAtStart: floorHit(at: finger, height: start.y),
+            panContext = PanContext(wrapper: wrapper,
+                                    worldAtStart: start,
+                                    localAtStart: wrapper.entity.position,
+                                    fingerAtStart: finger,
+                                    cameraTransform: arView.cameraTransform.matrix,
                                     metersPerPoint: FurnitureDragMath.verticalMetersPerPoint(
                                         depth: distance, viewportHeight: Float(arView.bounds.height)))
         case .changed:
             guard let context = panContext, !context.wrapper.isLocked else { return }
             if context.wrapper.movementMode == .vertical {
-                var position = context.anchorAtStart
+                var position = context.localAtStart
                 position.y = FurnitureDragMath.verticalTarget(
                     startHeight: position.y,
                     fingerDeltaY: Float(finger.y - context.fingerAtStart.y),
                     metersPerPoint: context.metersPerPoint)
-                context.anchor.setPosition(position, relativeTo: nil)
-            } else if let initialHit = context.hitAtStart,
-                      let currentHit = floorHit(at: finger, height: context.anchorAtStart.y) {
-                let target = FurnitureDragMath.horizontalTarget(
-                    anchorAtStart: context.anchorAtStart,
-                    hitAtStart: initialHit, currentHit: currentHit)
-                context.anchor.setPosition(target, relativeTo: nil)
+                context.wrapper.entity.position = position
+            } else {
+                let target = FurnitureDragMath.screenAlignedTarget(
+                    anchorAtStart: context.worldAtStart,
+                    fingerDelta: CGPoint(x: finger.x - context.fingerAtStart.x,
+                                         y: finger.y - context.fingerAtStart.y),
+                    cameraTransform: context.cameraTransform,
+                    metersPerPoint: context.metersPerPoint)
+                context.wrapper.entity.position = context.localAtStart + target - context.worldAtStart
             }
         case .ended, .cancelled, .failed:
             panContext = nil
         default:
             break
         }
-    }
-
-    private func floorHit(at point: CGPoint, height: Float) -> SIMD3<Float>? {
-        var plane = matrix_identity_float4x4
-        plane.columns.3.y = height
-        return arView.unproject(point, ontoPlane: plane)
     }
 
     func toggleMovementMode() {
@@ -272,6 +286,24 @@ final class ARSessionManager: NSObject, ObservableObject {
         wrapper.entity.anchor?.removeFromParent()
         usedFurnitureModels = furnitureWrappers.compactMap { $0.model?.resourceName }
         refreshSelectionState()
+    }
+
+    func recenterSelected() {
+        guard let wrapper = furnitureWrappers.first(where: { $0.isSelected }),
+              let anchor = wrapper.entity.anchor as? AnchorEntity else { return }
+        let point = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
+        guard let result = arView.raycast(from: point, allowing: .estimatedPlane,
+                                          alignment: .horizontal).first else {
+            placementFailed = true
+            return
+        }
+        let position = result.worldTransform.columns.3
+        let anchorWorld = anchor.position(relativeTo: nil)
+        wrapper.entity.position = wrapper.originalPosition
+            + SIMD3(position.x - anchorWorld.x,
+                    position.y - anchorWorld.y,
+                    position.z - anchorWorld.z)
+        wrapper.entity.scale = wrapper.originalScale
     }
 
     func experience() throws -> RoomExperience {

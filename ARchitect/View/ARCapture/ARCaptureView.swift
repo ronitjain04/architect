@@ -11,13 +11,17 @@ import SwiftUI
 import RealityKit
 
 struct ARCaptureView: View {
+    private struct CaptureDraft: Identifiable {
+        let id = UUID()
+        let image: UIImage
+        let experience: RoomExperience
+    }
+
     @Environment(\.dismiss) private var dismiss
     @StateObject private var manager = ARSessionManager()
     @State private var isScanning = true
-    @State private var capturedExperience: RoomExperience?
     @State private var showGallery = false
-    @State private var capturedImage: UIImage?
-    @State private var showNewPost = false
+    @State private var captureDraft: CaptureDraft?
 
     var body: some View {
         ZStack {
@@ -58,6 +62,7 @@ struct ARCaptureView: View {
 
                     if let mode = manager.selectedMovementMode {
                         circleButton(icon: "trash") { manager.removeSelected() }
+                        circleButton(icon: "scope") { manager.recenterSelected() }
                         circleButton(icon: mode == .horizontal
                                      ? "arrow.up.and.down.circle.fill"
                                      : "arrow.left.and.right.circle.fill") {
@@ -89,16 +94,18 @@ struct ARCaptureView: View {
 
                     // Shutter
                     Button {
+                        let experience: RoomExperience
+                        do { experience = try manager.experience() }
+                        catch {
+                            manager.errorMessage = error.localizedDescription
+                            return
+                        }
                         manager.snapshot { image in
                             guard let image else {
                                 manager.errorMessage = "Could not capture a preview. Please try again."
                                 return
                             }
-                            do {
-                                capturedExperience = try manager.experience()
-                                capturedImage = image
-                                showNewPost = true
-                            } catch { manager.errorMessage = error.localizedDescription }
+                            captureDraft = CaptureDraft(image: image, experience: experience)
                         }
                     } label: {
                         ZStack {
@@ -127,15 +134,13 @@ struct ARCaptureView: View {
                 manager.loadAndPlace(named: modelName)
             }
         }
-        .fullScreenCover(isPresented: $showNewPost) {
-            if let capturedImage {
-                NewPostView(
-                    image: capturedImage,
-                    usedFurniture: manager.usedFurnitureModels,
-                    experience: capturedExperience,
-                    onShared: { dismiss() }
-                )
-            }
+        .fullScreenCover(item: $captureDraft) { draft in
+            NewPostView(
+                image: draft.image,
+                usedFurniture: manager.usedFurnitureModels,
+                experience: draft.experience,
+                onShared: { dismiss() }
+            )
         }
         .alert("Insufficient space", isPresented: $manager.placementFailed) {
             Button("OK", role: .cancel) { }

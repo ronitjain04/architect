@@ -66,6 +66,28 @@ extension RoomExperience {
             reference.simdTransform = piece.matrix
             scene.rootNode.addChildNode(reference)
         }
+        // RoomPlan's exported scene has no guaranteed default point of view.
+        // Frame its actual geometry so both the scan review and shared-room
+        // preview open on the room rather than an empty camera origin.
+        let bounds = scene.rootNode.boundingBox
+        let center = SCNVector3(
+            (bounds.min.x + bounds.max.x) / 2,
+            (bounds.min.y + bounds.max.y) / 2,
+            (bounds.min.z + bounds.max.z) / 2
+        )
+        let size = SIMD3<Float>(bounds.max.x - bounds.min.x,
+                                bounds.max.y - bounds.min.y,
+                                bounds.max.z - bounds.min.z)
+        let radius = max(simd_length(size), 1)
+        let camera = SCNNode()
+        camera.camera = SCNCamera()
+        camera.camera?.zNear = 0.01
+        camera.camera?.zFar = Double(max(radius * 10, 100))
+        camera.position = SCNVector3(center.x + radius * 0.8,
+                                     center.y + radius * 0.65,
+                                     center.z + radius * 0.8)
+        camera.look(at: center)
+        scene.rootNode.addChildNode(camera)
         return scene
     }
 
