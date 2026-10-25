@@ -5,6 +5,7 @@ import AVFoundation
 import FirebaseFirestore
 
 struct RoomExperienceView: View {
+    @Environment(\.dismiss) private var dismiss
     let data: Data?
     var postID: String? = nil
     @State private var furniture: [PlacedFurniture] = []
@@ -13,45 +14,64 @@ struct RoomExperienceView: View {
     @State private var showAR = false
 
     var body: some View {
-        ZStack {
-            Color.appBackground.ignoresSafeArea()
-            if let scene {
-                VStack(spacing: 0) {
-                    SceneView(scene: scene, options: [.allowsCameraControl, .autoenablesDefaultLighting])
-                    VStack(alignment: .leading, spacing: AppSpacing.md) {
-                        Text("Explore the room")
-                            .font(AppFont.title3)
-                            .foregroundStyle(Color.appText)
-                        Text("Drag to turn the room · Pinch to zoom")
-                            .font(AppFont.callout)
-                            .foregroundStyle(Color.appTextSecondary)
-                        if !furniture.isEmpty {
-                            Text(furniture.map { $0.model.title }.joined(separator: " · "))
-                                .font(AppFont.caption)
-                                .foregroundStyle(Color.appTextSecondary)
-                                .lineLimit(2)
-                        }
-                        Button("View in your space", systemImage: "arkit") { showAR = true }
-                            .buttonStyle(PrimaryButtonStyle())
-                            .disabled(!ARWorldTrackingConfiguration.isSupported)
-                    }
-                    .padding(AppSpacing.lg)
-                    // RootTabView overlays its custom tab bar instead of reserving
-                    // layout space. Keep the action above it while the cream
-                    // surface continues behind the bar.
-                    .padding(.bottom, 90)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.appBackground)
+        VStack(spacing: 0) {
+            HStack(spacing: AppSpacing.md) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Color.appText)
+                        .frame(width: 44, height: 44, alignment: .leading)
                 }
-            } else if let errorMessage {
-                ContentUnavailableView("Unable to open this room", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-            } else {
-                ProgressView("Rebuilding the room…")
+                .accessibilityLabel("Back to post")
+                Text("Shared room")
+                    .font(AppFont.headline)
+                    .foregroundStyle(Color.appText)
+                Spacer()
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .frame(height: 48)
+            .background(Color.appBackground)
+            Divider().background(Color.appDivider)
+
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
+                if let scene {
+                    VStack(spacing: 0) {
+                        SceneView(scene: scene, options: [.allowsCameraControl, .autoenablesDefaultLighting])
+                        VStack(alignment: .leading, spacing: AppSpacing.md) {
+                            Text("Explore the room")
+                                .font(AppFont.title3)
+                                .foregroundStyle(Color.appText)
+                            Text("Drag to turn the room · Pinch to zoom")
+                                .font(AppFont.callout)
+                                .foregroundStyle(Color.appTextSecondary)
+                            if !furniture.isEmpty {
+                                Text(furniture.map { $0.model.title }.joined(separator: " · "))
+                                    .font(AppFont.caption)
+                                    .foregroundStyle(Color.appTextSecondary)
+                                    .lineLimit(2)
+                            }
+                            Button("View in your space", systemImage: "arkit") { showAR = true }
+                                .buttonStyle(PrimaryButtonStyle())
+                                .disabled(!ARWorldTrackingConfiguration.isSupported)
+                        }
+                        .padding(AppSpacing.lg)
+                        // RootTabView overlays its custom tab bar instead of reserving
+                        // layout space. Keep the action above it while the cream
+                        // surface continues behind the bar.
+                        .padding(.bottom, 90)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.appBackground)
+                    }
+                } else if let errorMessage {
+                    ContentUnavailableView("Unable to open this room", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+                } else {
+                    ProgressView("Rebuilding the room…")
+                }
             }
         }
-        .navigationTitle("Shared room")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.visible, for: .navigationBar)
+        .background(Color.appBackground.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             guard scene == nil else { return }
             do {

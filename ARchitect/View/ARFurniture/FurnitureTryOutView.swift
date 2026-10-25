@@ -26,34 +26,27 @@ struct FurnitureTryOutView: View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
 
-            VStack {
-                ZStack {
-                    Text(model.title)
-                        .font(AppFont.fraunces(18, .semibold))
-                        .foregroundColor(.appText)
-
-                    HStack {
-                        Button(action: {
-                            dismiss() // ✅ This properly stops the view and session
-                        }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(Circle().fill(Color.black.opacity(0.55)))
-                        }
-                        Spacer()
+            VStack(spacing: 0) {
+                HStack(spacing: AppSpacing.md) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.appText)
+                            .frame(width: 44, height: 44)
+                            .background(Color.appSurfaceAlt, in: Circle())
                     }
-                    .padding(.horizontal, AppSpacing.md)
-                }
-
-                HStack {
-                    Text("Preview dimensions are approximate")
-                        .font(AppFont.inter(12, .regular))
-                        .foregroundColor(.appTextSecondary)
-                        .padding(.leading, AppSpacing.md)
+                    .accessibilityLabel("Close furniture preview")
                     Spacer()
+                    Text(model.title)
+                        .font(AppFont.headline)
+                        .foregroundStyle(Color.appText)
+                        .lineLimit(1)
+                    Spacer()
+                    Color.clear.frame(width: 44, height: 44)
                 }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.vertical, AppSpacing.sm)
+                .background(Color.appBackground.opacity(0.97))
                 RealityView { content in
                     if !initialized {
                         content.camera = .virtual
@@ -156,22 +149,24 @@ struct FurnitureTryOutView: View {
                         }
                 )
                 
-                Button(action: {
-                    useWorldTracking.toggle()
-                }) {
-                    VStack {
-                        Image(useWorldTracking ? "goback" : "viewin3d")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 80)
-                        Text(useWorldTracking ? "Stop" : "View in your room")
-                            .font(AppFont.inter(15, .semibold))
+                VStack(alignment: .leading, spacing: AppSpacing.md) {
+                    Text(useWorldTracking
+                         ? "Move your phone to see how this piece fits."
+                         : "Drag to turn · Double-tap to zoom. Dimensions are approximate.")
+                        .font(AppFont.callout)
+                        .foregroundStyle(Color.appTextSecondary)
+                    Button {
+                        useWorldTracking.toggle()
+                    } label: {
+                        Label(useWorldTracking ? "Back to 3D preview" : "View in your room",
+                              systemImage: useWorldTracking ? "cube" : "arkit")
                     }
-                    .foregroundStyle(Color.appText)
+                    .buttonStyle(PrimaryButtonStyle())
                 }
+                .padding(AppSpacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.appBackground.opacity(0.97))
             }
-            .padding(.vertical)
-            .navigationTitle(model.title + " Preview")
             .alert("Model unavailable", isPresented: Binding(get: { loadError != nil }, set: { if !$0 { loadError = nil } })) {
                 Button("Close") { dismiss() }
             } message: { Text(loadError ?? "") }

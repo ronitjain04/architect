@@ -142,6 +142,7 @@ struct PostView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
                         }
+                        Color.clear.frame(height: 90)
                     }
                 }
             }

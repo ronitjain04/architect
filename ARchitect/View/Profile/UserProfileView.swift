@@ -67,8 +67,8 @@ struct UserProfileView: View {
                         PostGrid(posts: posts)
                             .padding(.top, 2)
                     }
+                    Color.clear.frame(height: 90)
                 }
-                .padding(.bottom, 0)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -168,6 +168,7 @@ struct FollowButton: View {
                 )
         }
         .disabled(uid == nil)
+        .opacity(uid == nil ? 0.5 : 1)
         .onChange(of: session.isFollowing(username)) { oldValue, newValue in
             if oldValue != newValue { onToggle(newValue ? 1 : -1) }
         }
