@@ -34,6 +34,7 @@ final class SessionStore: ObservableObject {
     var isAuthenticated: Bool { user != nil && profile != nil }
     @Published var errorMessage: String?
     @Published private(set) var isLoadingProfile = false
+    @Published private(set) var isResolvingSession = true
     private var pendingUsername: String?
     private var pendingActions: Set<String> = []
 
@@ -45,6 +46,9 @@ final class SessionStore: ObservableObject {
         authHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.isResolvingSession = false
+                self.isLoadingProfile = user != nil
+                self.errorMessage = nil
                 self.user = user
                 self.profile = nil
                 self.savedPostIDs = []
@@ -56,7 +60,7 @@ final class SessionStore: ObservableObject {
                     self.profile = nil
                     self.savedPostIDs = []
                     self.following = []
-                self.blockedUIDs = []
+                    self.blockedUIDs = []
                 }
             }
         }

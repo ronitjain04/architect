@@ -15,7 +15,22 @@ struct MainView: View {
     @StateObject private var session = SessionStore()
 
     var body: some View {
-        RootTabView()
+        Group {
+            if session.isAuthenticated {
+                RootTabView()
+            } else if session.isResolvingSession || session.isLoadingProfile {
+                ZStack {
+                    Color.appBackground.ignoresSafeArea()
+                    ProgressView("Opening your space…")
+                        .tint(.appPrimary)
+                        .foregroundStyle(Color.appText)
+                }
+            } else if session.user != nil {
+                ProfileSetupView()
+            } else {
+                AuthenticationView()
+            }
+        }
             .task(id: "\(session.isAuthenticated)-\(sharedPostID ?? "")") {
                 guard session.isAuthenticated, let uid = session.user?.uid,
                       let id = sharedPostID else { return }
@@ -36,21 +51,6 @@ struct MainView: View {
             .alert("Could not complete action", isPresented: Binding(get: { session.errorMessage != nil && session.isAuthenticated }, set: { if !$0 { session.errorMessage = nil } })) {
                 Button("OK") { session.errorMessage = nil }
             } message: { Text(session.errorMessage ?? "") }
-            .sheet(isPresented: Binding(get: {
-                !session.isAuthenticated
-            }, set: { _ in })) {
-                Group {
-                    if session.user != nil {
-                        ProfileSetupView().environmentObject(session)
-                    } else {
-                        AuthenticationView().environmentObject(session)
-                    }
-                }
-                    .interactiveDismissDisabled(true)
-                    // Sheets get a fresh environment, so apply here too.
-                    .font(AppFont.body)
-                    .tint(.appPrimary)
-            }
     }
 }
 
@@ -62,16 +62,40 @@ private struct ProfileSetupView: View {
     @EnvironmentObject var session: SessionStore
     @State private var username = ""
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Setting up your profile").font(.title2)
-            if session.isLoadingProfile { ProgressView() }
-            if let error = session.errorMessage { Text(error).foregroundStyle(.red) }
-            if !session.isLoadingProfile {
-                TextField("Username (optional for retry)", text: $username)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
-                Button("Try again") { Task { await session.retryProfile(username: username.isEmpty ? nil : username) } }
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: AppSpacing.lg) {
+                Image(systemName: "person.crop.circle.badge.exclamationmark")
+                    .font(.system(size: 42, weight: .light))
+                    .foregroundStyle(Color.appPrimary)
+                Text("Your profile needs a moment")
+                    .font(AppFont.title)
+                    .foregroundStyle(Color.appText)
+                Text("We couldn't finish loading your profile. Check your connection and try again.")
+                    .font(AppFont.body)
+                    .foregroundStyle(Color.appTextSecondary)
+                if let error = session.errorMessage {
+                    Text(error)
+                        .font(AppFont.callout)
+                        .foregroundStyle(Color.appLike)
+                }
+                TextField("Username (only if you need a new one)", text: $username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(AppSpacing.md)
+                    .background(Color.appSurfaceAlt, in: RoundedRectangle(cornerRadius: AppRadius.md))
+                Button("Try again") {
+                    Task { await session.retryProfile(username: username.isEmpty ? nil : username) }
+                }
+                .buttonStyle(PrimaryButtonStyle())
                 Button("Sign out") { session.signOut() }
+                    .font(AppFont.button)
+                    .frame(maxWidth: .infinity)
+                    .foregroundStyle(Color.appPrimary)
+                Spacer()
             }
-        }.padding()
+            .padding(AppSpacing.lg)
+            .padding(.top, 90)
+        }
     }
 }
