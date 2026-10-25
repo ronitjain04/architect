@@ -119,7 +119,11 @@ struct RoomScanView: View {
                 }
                 .padding(AppSpacing.lg)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.appBackground.opacity(0.97), in: UnevenRoundedRectangle(topLeadingRadius: AppRadius.lg, topTrailingRadius: AppRadius.lg))
+                .background {
+                    UnevenRoundedRectangle(topLeadingRadius: AppRadius.lg, topTrailingRadius: AppRadius.lg)
+                        .fill(Color.appBackground.opacity(0.97))
+                        .ignoresSafeArea(edges: .bottom)
+                }
             }
         }
         .task { await refreshCameraAccess() }

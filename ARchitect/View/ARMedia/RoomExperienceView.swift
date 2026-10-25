@@ -36,6 +36,10 @@ struct RoomExperienceView: View {
                             .disabled(!ARWorldTrackingConfiguration.isSupported)
                     }
                     .padding(AppSpacing.lg)
+                    // RootTabView overlays its custom tab bar instead of reserving
+                    // layout space. Keep the action above it while the cream
+                    // surface continues behind the bar.
+                    .padding(.bottom, 90)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.appBackground)
                 }
@@ -104,8 +108,7 @@ private struct RoomARPreview: View {
                 }
                 .foregroundStyle(Color.appText)
                 .padding(.horizontal, AppSpacing.md)
-                .padding(.vertical, 12)
-                .background(Color.appBackground.opacity(0.97))
+                .padding(.top, AppSpacing.sm)
                 Spacer()
                 VStack(spacing: AppSpacing.md) {
                     Text("Tap a detected floor to place the room.")
