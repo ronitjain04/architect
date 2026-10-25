@@ -14,7 +14,26 @@ struct ProfileView: View {
     @State private var selectedSection: ProfileSection = .posts
     @State private var showEditProfile = false
     @State private var showARCamera = false
-    @State private var showLogOutDialog = false
+    @State private var showAccountMenu = false
+    @State private var accountAlert: AccountAlert?
+
+    private enum AccountAlert {
+        case confirmDeletion, requested, error(String)
+        var title: String {
+            switch self {
+            case .confirmDeletion: "Delete your account and shared rooms?"
+            case .requested: "Deletion requested"
+            case .error: "Could not request deletion"
+            }
+        }
+        var message: String {
+            switch self {
+            case .confirmDeletion: "Your account and shared content will be removed. This cannot be undone."
+            case .requested: "Your account deletion request has been recorded. You can sign out now."
+            case .error(let message): message
+            }
+        }
+    }
 
     @State private var myPosts: [Post] = []
     @State private var savedPosts: [Post] = []
@@ -81,7 +100,7 @@ struct ProfileView: View {
                     .foregroundColor(.appText)
             }
             // Account menu.
-            Button { showLogOutDialog = true } label: {
+            Button { showAccountMenu = true } label: {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 22, weight: .regular))
                     .foregroundColor(.appText)
@@ -93,11 +112,31 @@ struct ProfileView: View {
         .fullScreenCover(isPresented: $showARCamera) {
             ARCaptureView()
         }
-        .confirmationDialog("Account", isPresented: $showLogOutDialog) {
-            Button("Log out", role: .destructive) {
-                session.signOut()
-            }
+        .confirmationDialog("Account", isPresented: $showAccountMenu) {
+            Button("Log out") { session.signOut() }
+            Button("Request account deletion", role: .destructive) { accountAlert = .confirmDeletion }
         }
+        .alert(accountAlert?.title ?? "", isPresented: Binding(
+            get: { accountAlert != nil }, set: { if !$0 { accountAlert = nil } }
+        )) {
+            if case .confirmDeletion = accountAlert {
+                Button("Request deletion", role: .destructive) {
+                    accountAlert = nil
+                    Task {
+                        do {
+                            try await AccountSafetyService.requestDeletion()
+                            accountAlert = .requested
+                        } catch { accountAlert = .error(error.localizedDescription) }
+                    }
+                }
+                Button("Cancel", role: .cancel) { accountAlert = nil }
+            } else {
+                Button("OK") {
+                    if case .requested = accountAlert { session.signOut() }
+                    accountAlert = nil
+                }
+            }
+        } message: { Text(accountAlert?.message ?? "") }
     }
 
     // MARK: Header
@@ -298,8 +337,7 @@ struct EditProfileSheet: View {
 
             Button("Done") {
                 Task {
-                    await session.updateProfile(displayName: displayName, bio: bio)
-                    dismiss()
+                    if await session.updateProfile(displayName: displayName, bio: bio) { dismiss() }
                 }
             }
             .buttonStyle(PrimaryButtonStyle())

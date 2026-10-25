@@ -11,15 +11,28 @@ import SwiftUI
 import RealityKit
 
 struct ARCaptureView: View {
+    private struct CaptureDraft: Identifiable {
+        let id = UUID()
+        let image: UIImage
+        let experience: RoomExperience
+    }
+
     @Environment(\.dismiss) private var dismiss
     @StateObject private var manager = ARSessionManager()
+    @State private var isScanning = true
     @State private var showGallery = false
-    @State private var capturedImage: UIImage?
-    @State private var showNewPost = false
+    @State private var captureDraft: CaptureDraft?
 
     var body: some View {
         ZStack {
-            if manager.isARSupported {
+            if isScanning {
+                RoomScanView(session: manager.arView.session, onScanned: { room in
+                    manager.capturedRoom = room
+                    isScanning = false
+                    manager.attachGesturesIfNeeded()
+                    manager.start()
+                }, onCancel: { dismiss() })
+            } else if manager.isARSupported {
                 ARViewContainer(manager: manager)
                     .ignoresSafeArea()
             } else {
@@ -40,6 +53,7 @@ struct ARCaptureView: View {
             }
 
             // Chrome
+            if !isScanning {
             VStack {
                 HStack {
                     circleButton(icon: "chevron.left") { dismiss() }
@@ -47,6 +61,8 @@ struct ARCaptureView: View {
                     Spacer()
 
                     if let mode = manager.selectedMovementMode {
+                        circleButton(icon: "trash") { manager.removeSelected() }
+                        circleButton(icon: "scope") { manager.recenterSelected() }
                         circleButton(icon: mode == .horizontal
                                      ? "arrow.up.and.down.circle.fill"
                                      : "arrow.left.and.right.circle.fill") {
@@ -78,10 +94,18 @@ struct ARCaptureView: View {
 
                     // Shutter
                     Button {
+                        let experience: RoomExperience
+                        do { experience = try manager.experience() }
+                        catch {
+                            manager.errorMessage = error.localizedDescription
+                            return
+                        }
                         manager.snapshot { image in
-                            guard let image else { return }
-                            capturedImage = image
-                            showNewPost = true
+                            guard let image else {
+                                manager.errorMessage = "Could not capture a preview. Please try again."
+                                return
+                            }
+                            captureDraft = CaptureDraft(image: image, experience: experience)
                         }
                     } label: {
                         ZStack {
@@ -98,10 +122,10 @@ struct ARCaptureView: View {
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.bottom, AppSpacing.xl)
             }
+            }
         }
         .onAppear {
-            manager.attachGesturesIfNeeded()
-            manager.start()
+            if !isScanning { manager.start() }
         }
         .onDisappear { manager.stop() }
         .sheet(isPresented: $showGallery) {
@@ -110,20 +134,25 @@ struct ARCaptureView: View {
                 manager.loadAndPlace(named: modelName)
             }
         }
-        .fullScreenCover(isPresented: $showNewPost) {
-            if let capturedImage {
-                NewPostView(
-                    image: capturedImage,
-                    usedFurniture: manager.usedFurnitureModels,
-                    onShared: { dismiss() }
-                )
-            }
+        .fullScreenCover(item: $captureDraft) { draft in
+            NewPostView(
+                image: draft.image,
+                usedFurniture: manager.usedFurnitureModels,
+                experience: draft.experience,
+                onShared: { dismiss() }
+            )
         }
         .alert("Insufficient space", isPresented: $manager.placementFailed) {
             Button("OK", role: .cancel) { }
         } message: {
             Text("There isn't enough open floor in front of you to place the furniture. Move to a more open area and try again.")
         }
+        .alert("Could not complete action", isPresented: Binding(
+            get: { manager.errorMessage != nil },
+            set: { if !$0 { manager.errorMessage = nil } }
+        )) {
+            Button("OK") { manager.errorMessage = nil }
+        } message: { Text(manager.errorMessage ?? "") }
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -154,7 +183,7 @@ struct FurnitureGallerySheet: View {
     var onSelect: (String) -> Void
 
     // Bundled .usdz models (display name derived from the file name).
-    private let models = ["Curved Comfort Chair", "Arm chair", "Grey Couch"]
+    private let models = RoomFurnitureModel.allCases.map(\.resourceName)
 
     var body: some View {
         VStack(spacing: 0) {

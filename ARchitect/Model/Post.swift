@@ -34,6 +34,8 @@ class Post: ObservableObject, Identifiable {
     let imageData: Data?
     let description: String
     let authorUid: String
+    let sceneData: Data?
+    let hasScene: Bool
     let timeAgo: Date
     @Published var likes: Int
     @Published var user_liked: Bool
@@ -51,6 +53,8 @@ class Post: ObservableObject, Identifiable {
         self.imageData = data["imageData"] as? Data
         self.description = data["description"] as? String ?? ""
         self.authorUid = data["authorUid"] as? String ?? ""
+        self.sceneData = data["sceneData"] as? Data
+        self.hasScene = data["hasScene"] as? Bool ?? (data["sceneData"] is Data)
         self.timeAgo = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
 
         let likedBy = data["likedBy"] as? [String] ?? []
@@ -76,6 +80,8 @@ class Post: ObservableObject, Identifiable {
         self.imageData = nil
         self.description = description
         self.authorUid = ""
+        self.sceneData = nil
+        self.hasScene = false
         self.timeAgo = Date()
         self.likes = likes
         self.user_liked = user_liked
@@ -93,6 +99,8 @@ class Post: ObservableObject, Identifiable {
         self.imageData = nil
         self.description = "Lengthy description about the furniture and the positioning of different elements that were used."
         self.authorUid = ""
+        self.sceneData = nil
+        self.hasScene = false
         self.timeAgo = Date()
         self.likes = 80
         self.user_liked = false
@@ -103,41 +111,30 @@ class Post: ObservableObject, Identifiable {
     // MARK: - Actions
 
     /// Optimistic local flip; persists to the post document when remote.
+    @Published var actionError: String?
+    @Published private(set) var isUpdatingLike = false
+
     func toggleLike(actorUsername: String) {
-        if user_liked {
-            likes = max(likes - 1, 0)
-        } else {
-            likes += 1
-        }
-        user_liked.toggle()
-
-        guard let docID, let uid = Auth.auth().currentUser?.uid else { return }
-        let update = user_liked
-            ? FieldValue.arrayUnion([uid])
-            : FieldValue.arrayRemove([uid])
+        guard !isUpdatingLike, let docID, let uid = Auth.auth().currentUser?.uid else { return }
+        isUpdatingLike = true
+        let newValue = !user_liked
+        let update = newValue ? FieldValue.arrayUnion([uid]) : FieldValue.arrayRemove([uid])
         Firestore.firestore().collection("posts").document(docID)
-            .updateData(["likedBy": update])
-
-        guard !actorUsername.isEmpty else { return }
-        if user_liked {
-            NotificationService.writeLike(
-                recipientUid: authorUid,
-                actorUid: uid,
-                actorUsername: actorUsername,
-                postID: docID
-            )
-        } else {
-            NotificationService.deleteLike(
-                recipientUid: authorUid,
-                actorUsername: actorUsername,
-                postID: docID
-            )
-        }
-    }
-
-    func addComment(text: String, publisher: String) {
-        commentsModel.addComment(text: text, publisher: publisher)
-        commentCount += 1
+            .updateData(["likedBy": update]) { [weak self] error in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.isUpdatingLike = false
+                    if let error { self.actionError = error.localizedDescription; return }
+                    self.user_liked = newValue
+                    self.likes = max(0, self.likes + (newValue ? 1 : -1))
+                    if newValue {
+                        NotificationService.writeLike(recipientUid: self.authorUid, actorUid: uid,
+                                                      actorUsername: actorUsername, postID: docID)
+                    } else {
+                        NotificationService.deleteLike(recipientUid: self.authorUid, actorUid: uid, postID: docID)
+                    }
+                }
+            }
     }
 
     func time_ago() -> String {

@@ -22,7 +22,7 @@ struct ARMediaView: View {
     @State private var selectedPost: Post?
     @State private var showPostDetail = false
 
-    private var posts: [Post] { feed.posts }
+    private var posts: [Post] { feed.posts.filter { !session.isBlocked($0.authorUid) } }
 
     var body: some View {
         ZStack {
@@ -40,6 +40,9 @@ struct ARMediaView: View {
                                 .tint(.appPrimary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 80)
+                        } else if let error = feed.errorMessage {
+                            Text(error).foregroundStyle(.red).padding()
+                            Button("Retry") { feed.restart() }
                         } else if posts.isEmpty {
                             emptyFeed
                         } else {
@@ -51,12 +54,17 @@ struct ARMediaView: View {
                             }
                         }
                     }
-                    .padding(.bottom, 90) // clear the floating tab bar
+                    .padding(.bottom, 10)
+                    if feed.canLoadMore {
+                        Button(feed.loadingMore ? "Loading…" : "Load more rooms") { Task { await feed.loadMore() } }
+                            .disabled(feed.loadingMore).padding()
+                    }
+                    Color.clear.frame(height: 90)
                 }
                 .refreshable {
                     // The snapshot listener keeps the feed live; this is just
                     // the familiar gesture.
-                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    feed.restart()
                     await refreshUnreadCount()
                 }
             }

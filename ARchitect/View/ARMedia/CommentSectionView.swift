@@ -66,6 +66,9 @@ private struct CommentSheetContent: View {
 
             Divider().background(Color.appDivider)
 
+            if let error = model.errorMessage {
+                Text(error).font(.footnote).foregroundStyle(.red).padding(.horizontal)
+            }
             // Input bar
             HStack(spacing: AppSpacing.sm + 2) {
                 Avatar(monogram: currentUsername, size: 34)
@@ -85,7 +88,7 @@ private struct CommentSheetContent: View {
                         .font(.system(size: 30))
                         .foregroundColor(newCommentText.isEmpty ? .appTextSecondary : .appAccent)
                 }
-                .disabled(newCommentText.isEmpty)
+                .disabled(newCommentText.isEmpty || model.isSending)
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.top, AppSpacing.sm + 2)
@@ -96,8 +99,9 @@ private struct CommentSheetContent: View {
     private func postComment() {
         let text = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        model.addComment(text: text, publisher: currentUsername)
-        newCommentText = ""
+        Task {
+            if await model.addComment(text: text, publisher: currentUsername) { newCommentText = "" }
+        }
     }
 }
 

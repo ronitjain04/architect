@@ -1,0 +1,8 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "posts", "fieldPath": "imageData", "indexes": [] },
+    { "collectionGroup": "posts", "fieldPath": "sceneData", "indexes": [] },
+    { "collectionGroup": "experience", "fieldPath": "sceneData", "indexes": [] }
+  ]
+}

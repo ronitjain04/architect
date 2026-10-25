@@ -29,8 +29,13 @@ final class SessionStore: ObservableObject {
     @Published private(set) var savedPostIDs: Set<String> = []
     /// Usernames the user follows.
     @Published private(set) var following: Set<String> = []
+    @Published private(set) var blockedUIDs: Set<String> = []
 
-    var isAuthenticated: Bool { user != nil }
+    var isAuthenticated: Bool { user != nil && profile != nil }
+    @Published var errorMessage: String?
+    @Published private(set) var isLoadingProfile = false
+    private var pendingUsername: String?
+    private var pendingActions: Set<String> = []
 
     private var authHandle: AuthStateDidChangeListenerHandle?
 
@@ -41,12 +46,17 @@ final class SessionStore: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.user = user
+                self.profile = nil
+                self.savedPostIDs = []
+                self.following = []
+                self.blockedUIDs = []
                 if let user {
                     await self.loadOrCreateProfile(for: user)
                 } else {
                     self.profile = nil
                     self.savedPostIDs = []
                     self.following = []
+                self.blockedUIDs = []
                 }
             }
         }
@@ -61,15 +71,24 @@ final class SessionStore: ObservableObject {
     // MARK: - Email / password
 
     func signUp(username: String, email: String, password: String) async throws {
-        let result = try await Auth.auth().createUser(withEmail: email, password: password)
-        let profile = UserProfile(username: username, displayName: username, bio: "", uid: result.user.uid)
-        try await Firestore.firestore().collection("users").document(result.user.uid).setData([
-            "username": profile.username,
-            "displayName": profile.displayName,
-            "bio": profile.bio,
-            "createdAt": FieldValue.serverTimestamp(),
-        ])
-        self.profile = profile
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard name.range(of: "^[a-z0-9_]{3,30}$", options: .regularExpression) != nil else {
+            throw ProfileError.invalidUsername
+        }
+        pendingUsername = name
+        do {
+            _ = try await Auth.auth().createUser(withEmail: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+        } catch { pendingUsername = nil; throw error }
+    }
+
+    enum ProfileError: LocalizedError {
+        case invalidUsername, usernameTaken
+        var errorDescription: String? {
+            switch self {
+            case .invalidUsername: return "Use 3–30 lowercase letters, numbers, or underscores for your username."
+            case .usernameTaken: return "That username is already taken. Choose a different username."
+            }
+        }
     }
 
     func logIn(email: String, password: String) async throws {
@@ -77,13 +96,14 @@ final class SessionStore: ObservableObject {
     }
 
     func signInWithGoogle() {
-        GoogleAuthService.signIn {
-            // The auth-state listener picks up the new session.
+        GoogleAuthService.signIn { [weak self] error in
+            if let error { self?.errorMessage = error.localizedDescription }
         }
     }
 
     func signOut() {
-        try? Auth.auth().signOut()
+        do { try Auth.auth().signOut() }
+        catch { errorMessage = error.localizedDescription }
     }
 
     // MARK: - Saved posts & following
@@ -93,84 +113,125 @@ final class SessionStore: ObservableObject {
     }
 
     func toggleSaved(_ postID: String) {
-        if savedPostIDs.contains(postID) {
-            savedPostIDs.remove(postID)
-        } else {
-            savedPostIDs.insert(postID)
+        guard let uid = user?.uid, pendingActions.insert("save_" + postID).inserted else { return }
+        let wasSaved = savedPostIDs.contains(postID)
+        Task {
+            defer { pendingActions.remove("save_" + postID) }
+            do {
+                try await Firestore.firestore().collection("users").document(uid).updateData([
+                    "savedPosts": wasSaved ? FieldValue.arrayRemove([postID]) : FieldValue.arrayUnion([postID])
+                ])
+                guard user?.uid == uid else { return }
+                if wasSaved { savedPostIDs.remove(postID) } else { savedPostIDs.insert(postID) }
+            } catch { errorMessage = error.localizedDescription }
         }
-        persistOwnDoc(["savedPosts": Array(savedPostIDs)])
     }
 
-    func isFollowing(_ username: String) -> Bool {
-        following.contains(username)
+    func isFollowing(_ username: String) -> Bool { following.contains(username) }
+    func isBlocked(_ uid: String) -> Bool { blockedUIDs.contains(uid) }
+
+    func block(_ uid: String) async -> Bool {
+        guard let ownUid = user?.uid, uid != ownUid, !uid.isEmpty else { return false }
+        do {
+            try await Firestore.firestore().collection("users").document(ownUid)
+                .updateData(["blockedUIDs": FieldValue.arrayUnion([uid])])
+            guard user?.uid == ownUid else { return false }
+            blockedUIDs.insert(uid)
+            return true
+        } catch { errorMessage = error.localizedDescription; return false }
     }
 
-    func toggleFollow(username: String, uid: String?) {
-        guard username != profile?.username else { return }
+    func toggleFollow(username: String, uid recipientUid: String?) {
+        guard let uid = user?.uid, let recipientUid, recipientUid != uid,
+              let actorUsername = profile?.username,
+              pendingActions.insert("follow_" + username).inserted else { return }
         let wasFollowing = following.contains(username)
-        if wasFollowing {
-            following.remove(username)
-        } else {
-            following.insert(username)
+        Task {
+            defer { pendingActions.remove("follow_" + username) }
+            do {
+                try await Firestore.firestore().collection("users").document(uid).updateData([
+                    "following": wasFollowing ? FieldValue.arrayRemove([username]) : FieldValue.arrayUnion([username])
+                ])
+                guard user?.uid == uid else { return }
+                if wasFollowing {
+                    following.remove(username)
+                    NotificationService.deleteFollow(recipientUid: recipientUid, actorUid: uid)
+                } else {
+                    following.insert(username)
+                    NotificationService.writeFollow(recipientUid: recipientUid, actorUid: uid, actorUsername: actorUsername)
+                }
+            } catch { errorMessage = error.localizedDescription }
         }
-        persistOwnDoc(["following": Array(following)])
-
-        guard let recipientUid = uid, let actorUid = user?.uid, let actorUsername = profile?.username else { return }
-        if wasFollowing {
-            NotificationService.deleteFollow(recipientUid: recipientUid, actorUsername: actorUsername)
-        } else {
-            NotificationService.writeFollow(recipientUid: recipientUid, actorUid: actorUid, actorUsername: actorUsername)
-        }
-    }
-
-    private func persistOwnDoc(_ fields: [String: Any]) {
-        guard let uid = user?.uid else { return }
-        Firestore.firestore().collection("users").document(uid)
-            .setData(fields, merge: true)
     }
 
     // MARK: - Profile document
 
-    func updateProfile(displayName: String, bio: String) async {
-        guard let uid = user?.uid else { return }
-        profile?.displayName = displayName
-        profile?.bio = bio
-        try? await Firestore.firestore().collection("users").document(uid).setData([
-            "displayName": displayName,
-            "bio": bio,
-        ], merge: true)
+    func updateProfile(displayName: String, bio: String) async -> Bool {
+        guard let uid = user?.uid, displayName.count <= 100, bio.count <= 500 else {
+            errorMessage = "Use a name under 100 characters and a bio under 500 characters."
+            return false
+        }
+        do {
+            try await Firestore.firestore().collection("users").document(uid).updateData([
+                "displayName": displayName, "bio": bio
+            ])
+            guard user?.uid == uid else { return false }
+            profile?.displayName = displayName
+            profile?.bio = bio
+            return true
+        } catch { errorMessage = error.localizedDescription; return false }
     }
 
-    private func loadOrCreateProfile(for user: FirebaseAuth.User) async {
-        let ref = Firestore.firestore().collection("users").document(user.uid)
-
-        if let snapshot = try? await ref.getDocument(), snapshot.exists, let data = snapshot.data() {
-            profile = UserProfile(
-                username: data["username"] as? String ?? "user",
-                displayName: data["displayName"] as? String ?? "",
-                bio: data["bio"] as? String ?? "",
-                uid: user.uid
-            )
-            savedPostIDs = Set(data["savedPosts"] as? [String] ?? [])
-            following = Set(data["following"] as? [String] ?? [])
-            return
+    func retryProfile(username: String? = nil) async {
+        if let username {
+            let name = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard name.range(of: "^[a-z0-9_]{3,30}$", options: .regularExpression) != nil else {
+                errorMessage = ProfileError.invalidUsername.localizedDescription
+                return
+            }
+            pendingUsername = name
         }
+        if let user { await loadOrCreateProfile(for: user) }
+    }
 
-        // First sign-in without a profile (e.g. Google) — derive a starter one.
-        let emailPrefix = user.email?.split(separator: "@").first.map(String.init)
-        let username = emailPrefix ?? "user\(String(user.uid.prefix(6)))"
-        let starter = UserProfile(
-            username: username,
-            displayName: user.displayName ?? username,
-            bio: "",
-            uid: user.uid
-        )
-        try? await ref.setData([
-            "username": starter.username,
-            "displayName": starter.displayName,
-            "bio": starter.bio,
-            "createdAt": FieldValue.serverTimestamp(),
-        ])
-        profile = starter
+    private func loadOrCreateProfile(for authUser: FirebaseAuth.User) async {
+        isLoadingProfile = true
+        defer { isLoadingProfile = false }
+        let db = Firestore.firestore()
+        let ref = db.collection("users").document(authUser.uid)
+        do {
+            let snapshot = try await ref.getDocument()
+            guard user?.uid == authUser.uid else { return }
+            if snapshot.exists, let data = snapshot.data() {
+                profile = UserProfile(username: data["username"] as? String ?? "user",
+                    displayName: data["displayName"] as? String ?? "", bio: data["bio"] as? String ?? "", uid: authUser.uid)
+                savedPostIDs = Set(data["savedPosts"] as? [String] ?? [])
+                following = Set(data["following"] as? [String] ?? [])
+                blockedUIDs = Set(data["blockedUIDs"] as? [String] ?? [])
+                pendingUsername = nil
+                return
+            }
+            // Do not create a replacement profile when the server read fails.
+            let username = pendingUsername ?? "user_" + authUser.uid.lowercased().prefix(20)
+            let claim = db.collection("usernames").document(username)
+            let legacy = try await db.collection("users").whereField("username", isEqualTo: username).limit(to: 1).getDocuments()
+            guard legacy.documents.isEmpty else { throw ProfileError.usernameTaken }
+            let fields: [String: Any] = ["username": username, "displayName": authUser.displayName ?? username,
+                "bio": "", "createdAt": FieldValue.serverTimestamp()]
+            _ = try await db.runTransaction { transaction, pointer -> Any? in
+                do {
+                    let reservation = try transaction.getDocument(claim)
+                    if reservation.exists && reservation.data()?["uid"] as? String != authUser.uid {
+                        throw ProfileError.usernameTaken
+                    }
+                    if !reservation.exists { transaction.setData(["uid": authUser.uid], forDocument: claim) }
+                    transaction.setData(fields, forDocument: ref)
+                    return nil
+                } catch { pointer?.pointee = error as NSError; return nil }
+            }
+            guard user?.uid == authUser.uid else { return }
+            profile = UserProfile(username: username, displayName: authUser.displayName ?? username, bio: "", uid: authUser.uid)
+            pendingUsername = nil
+        } catch { if user?.uid == authUser.uid { errorMessage = error.localizedDescription } }
     }
 }
