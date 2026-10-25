@@ -70,9 +70,12 @@ struct FurnitureDetailView: View {
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(item.model == nil)
+                .opacity(item.model == nil ? 0.5 : 1)
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.top, AppSpacing.sm)
-                .padding(.bottom, AppSpacing.md)
+                // The custom tab bar overlays pushed screens in RootTabView.
+                .padding(.bottom, 90)
+                .background(Color.appBackground)
             }
         }
         .fullScreenCover(isPresented: $showAR) {

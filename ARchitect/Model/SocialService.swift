@@ -107,7 +107,10 @@ enum SocialService {
 
     /// Deletes a post document (rules enforce author-only).
     static func deletePost(_ post: Post) async throws {
-        guard let docID = post.docID else { return }
+        guard let docID = post.docID else {
+            throw NSError(domain: "ARchitect.PostDeletion", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "This post cannot be deleted from the app."])
+        }
         let db = Firestore.firestore()
         let ref = db.collection("posts").document(docID)
         // Keep the parent until child cleanup succeeds so failed deletion can be retried.

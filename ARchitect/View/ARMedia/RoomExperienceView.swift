@@ -5,6 +5,7 @@ import AVFoundation
 import FirebaseFirestore
 
 struct RoomExperienceView: View {
+    @Environment(\.dismiss) private var dismiss
     let data: Data?
     var postID: String? = nil
     @State private var furniture: [PlacedFurniture] = []
@@ -13,31 +14,64 @@ struct RoomExperienceView: View {
     @State private var showAR = false
 
     var body: some View {
-        ZStack {
-            Color.appBackground.ignoresSafeArea()
-            if let scene {
-                VStack(spacing: 12) {
-                    SceneView(scene: scene, options: [.allowsCameraControl, .autoenablesDefaultLighting])
-                    if !furniture.isEmpty {
-                        Text(furniture.map { $0.model.title }.joined(separator: " · "))
-                            .font(.caption).lineLimit(2).padding(.horizontal)
-                    }
-                    Text("Drag to orbit · Pinch to zoom")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Button("Place room in AR", systemImage: "arkit") { showAR = true }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .disabled(!ARWorldTrackingConfiguration.isSupported)
-                        .padding()
+        VStack(spacing: 0) {
+            HStack(spacing: AppSpacing.md) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Color.appText)
+                        .frame(width: 44, height: 44, alignment: .leading)
                 }
-            } else if let errorMessage {
-                ContentUnavailableView("Unable to open this room", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-            } else {
-                ProgressView("Rebuilding the room…")
+                .accessibilityLabel("Back to post")
+                Text("Shared room")
+                    .font(AppFont.headline)
+                    .foregroundStyle(Color.appText)
+                Spacer()
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .frame(height: 48)
+            .background(Color.appBackground)
+            Divider().background(Color.appDivider)
+
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
+                if let scene {
+                    VStack(spacing: 0) {
+                        SceneView(scene: scene, options: [.allowsCameraControl, .autoenablesDefaultLighting])
+                        VStack(alignment: .leading, spacing: AppSpacing.md) {
+                            Text("Explore the room")
+                                .font(AppFont.title3)
+                                .foregroundStyle(Color.appText)
+                            Text("Drag to turn the room · Pinch to zoom")
+                                .font(AppFont.callout)
+                                .foregroundStyle(Color.appTextSecondary)
+                            if !furniture.isEmpty {
+                                Text(furniture.map { $0.model.title }.joined(separator: " · "))
+                                    .font(AppFont.caption)
+                                    .foregroundStyle(Color.appTextSecondary)
+                                    .lineLimit(2)
+                            }
+                            Button("View in your space", systemImage: "arkit") { showAR = true }
+                                .buttonStyle(PrimaryButtonStyle())
+                                .disabled(!ARWorldTrackingConfiguration.isSupported)
+                        }
+                        .padding(AppSpacing.lg)
+                        // RootTabView overlays its custom tab bar instead of reserving
+                        // layout space. Keep the action above it while the cream
+                        // surface continues behind the bar.
+                        .padding(.bottom, 90)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.appBackground)
+                    }
+                } else if let errorMessage {
+                    ContentUnavailableView("Unable to open this room", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+                } else {
+                    ProgressView("Rebuilding the room…")
+                }
             }
         }
-        .navigationTitle("Shared room")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.visible, for: .navigationBar)
+        .background(Color.appBackground.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             guard scene == nil else { return }
             do {
@@ -71,6 +105,7 @@ private struct RoomARPreview: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            Color.appBackground.ignoresSafeArea()
             if cameraAllowed {
                 RoomARContainer(source: scene, fullSize: fullSize).ignoresSafeArea()
             } else if checkedCamera {
@@ -78,15 +113,37 @@ private struct RoomARPreview: View {
             } else { ProgressView() }
             VStack {
                 HStack {
-                    Button("Close") { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                            .background(Color.appSurfaceAlt, in: Circle())
+                    }
+                    .accessibilityLabel("Close AR preview")
                     Spacer()
-                    Toggle("Full size", isOn: $fullSize).fixedSize()
-                }.padding().background(.regularMaterial)
+                    Text("View in your space")
+                        .font(AppFont.headline)
+                    Spacer()
+                    Color.clear.frame(width: 44, height: 44)
+                }
+                .foregroundStyle(Color.appText)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.top, AppSpacing.sm)
                 Spacer()
-                Text("Tap a detected floor to place the room. \(fullSize ? "Life-size" : "Tabletop (1:10)") reconstruction.")
-                    .multilineTextAlignment(.center).padding()
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .padding()
+                VStack(spacing: AppSpacing.md) {
+                    Text("Tap a detected floor to place the room.")
+                        .font(AppFont.callout)
+                        .foregroundStyle(Color.appText)
+                        .multilineTextAlignment(.center)
+                    Picker("Room size", selection: $fullSize) {
+                        Text("Tabletop").tag(false)
+                        Text("Full size").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .padding(AppSpacing.lg)
+                .background(Color.appBackground.opacity(0.97), in: RoundedRectangle(cornerRadius: AppRadius.lg))
+                .padding(AppSpacing.md)
             }
         }
         .task {

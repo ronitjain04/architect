@@ -56,18 +56,41 @@ struct ARCaptureView: View {
             if !isScanning {
             VStack {
                 HStack {
-                    circleButton(icon: "chevron.left") { dismiss() }
+                    circleButton(icon: "xmark") { dismiss() }
+
+                    Spacer()
+
+                    VStack(spacing: 2) {
+                        Text("STEP 3 OF 3")
+                            .font(AppFont.inter(11, .semibold))
+                            .foregroundStyle(Color.appTextSecondary)
+                        Text("Style your room")
+                            .font(AppFont.headline)
+                            .foregroundStyle(Color.appText)
+                    }
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, 8)
+                    .background(Color.appBackground.opacity(0.96), in: Capsule())
 
                     Spacer()
 
                     if let mode = manager.selectedMovementMode {
-                        circleButton(icon: "trash") { manager.removeSelected() }
-                        circleButton(icon: "scope") { manager.recenterSelected() }
-                        circleButton(icon: mode == .horizontal
-                                     ? "arrow.up.and.down.circle.fill"
-                                     : "arrow.left.and.right.circle.fill") {
-                            manager.toggleMovementMode()
+                        Menu {
+                            Button("Recenter furniture", systemImage: "scope") { manager.recenterSelected() }
+                            Button(mode == .horizontal ? "Move vertically" : "Move horizontally",
+                                   systemImage: "arrow.up.and.down") { manager.toggleMovementMode() }
+                            Button("Remove furniture", systemImage: "trash", role: .destructive) {
+                                manager.removeSelected()
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(Color.appText)
+                                .frame(width: 40, height: 40)
+                                .background(Color.appBackground.opacity(0.96), in: Circle())
                         }
+                    } else {
+                        Color.clear.frame(width: 40, height: 40)
                     }
                 }
                 .padding(.horizontal, AppSpacing.md)
@@ -75,25 +98,23 @@ struct ARCaptureView: View {
 
                 Spacer()
 
-                // Bottom controls: add furniture + shutter.
-                ZStack {
-                    HStack {
+                VStack(spacing: AppSpacing.md) {
+                    Text(manager.usedFurnitureModels.isEmpty
+                         ? "Add furniture to your scanned room."
+                         : "Drag furniture to move it. Tap an item for more options.")
+                        .font(AppFont.callout)
+                        .foregroundStyle(Color.appText)
+                        .multilineTextAlignment(.center)
+                    HStack(spacing: AppSpacing.md) {
                         Button { showGallery = true } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "chair.fill")
-                                Text("Furniture")
-                                    .font(AppFont.inter(14, .semibold))
-                            }
-                            .foregroundColor(.appOnPrimary)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 16)
-                            .background(Capsule().fill(Color.appPrimary.opacity(0.92)))
+                            Label("Add furniture", systemImage: "chair.fill")
+                                .font(AppFont.button)
+                                .foregroundStyle(Color.appOnPrimary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .background(Color.appPrimary, in: RoundedRectangle(cornerRadius: AppRadius.md))
                         }
-                        Spacer()
-                    }
-
-                    // Shutter
-                    Button {
+                        Button {
                         let experience: RoomExperience
                         do { experience = try manager.experience() }
                         catch {
@@ -107,20 +128,20 @@ struct ARCaptureView: View {
                             }
                             captureDraft = CaptureDraft(image: image, experience: experience)
                         }
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .strokeBorder(Color.white, lineWidth: 4)
-                                .frame(width: 72, height: 72)
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 58, height: 58)
+                        } label: {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundStyle(Color.appOnPrimary)
+                                .frame(width: 52, height: 52)
+                                .background(Color.appAccent, in: RoundedRectangle(cornerRadius: AppRadius.md))
                         }
-                        .shadow(color: .black.opacity(0.25), radius: 6)
+                        .accessibilityLabel("Capture preview")
                     }
                 }
-                .padding(.horizontal, AppSpacing.lg)
-                .padding(.bottom, AppSpacing.xl)
+                .padding(AppSpacing.md)
+                .background(Color.appBackground.opacity(0.96), in: RoundedRectangle(cornerRadius: AppRadius.lg))
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.md)
             }
             }
         }
@@ -160,9 +181,9 @@ struct ARCaptureView: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundColor(.appText)
                 .frame(width: 40, height: 40)
-                .background(Circle().fill(Color.black.opacity(0.55)))
+                .background(Circle().fill(Color.appBackground.opacity(0.96)))
         }
     }
 }
@@ -183,7 +204,7 @@ struct FurnitureGallerySheet: View {
     var onSelect: (String) -> Void
 
     // Bundled .usdz models (display name derived from the file name).
-    private let models = RoomFurnitureModel.allCases.map(\.resourceName)
+    private let models = RoomFurnitureModel.allCases
 
     var body: some View {
         VStack(spacing: 0) {
@@ -197,9 +218,9 @@ struct FurnitureGallerySheet: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(models, id: \.self) { model in
+                    ForEach(models, id: \.resourceName) { model in
                         Button {
-                            onSelect(model)
+                            onSelect(model.resourceName)
                         } label: {
                             HStack(spacing: AppSpacing.md) {
                                 ZStack {
@@ -210,7 +231,7 @@ struct FurnitureGallerySheet: View {
                                 }
                                 .frame(width: 44, height: 44)
 
-                                Text(model.capitalized)
+                                Text(model.title)
                                     .font(AppFont.inter(15, .regular))
                                     .foregroundColor(.appText)
 

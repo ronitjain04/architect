@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ActivityView: View {
     @EnvironmentObject var session: SessionStore
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var store = ActivityStore()
 
     @State private var selectedPost: Post?
@@ -19,33 +20,48 @@ struct ActivityView: View {
     @State private var showProfile = false
 
     var body: some View {
-        ZStack {
-            Color.appBackground.ignoresSafeArea()
+        VStack(spacing: 0) {
+            HStack(spacing: AppSpacing.md) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Color.appText)
+                        .frame(width: 44, height: 44, alignment: .leading)
+                }
+                .accessibilityLabel("Back to feed")
+                Text("Activity")
+                    .font(AppFont.headline)
+                    .foregroundStyle(Color.appText)
+                Spacer()
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .frame(height: 48)
+            Divider().background(Color.appDivider)
 
-            if store.isLoading {
-                ProgressView()
-                    .tint(.appPrimary)
-            } else if store.notifications.isEmpty {
-                emptyState
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(store.notifications) { notification in
-                            Button {
-                                handleTap(notification)
-                            } label: {
-                                row(for: notification)
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
+                if store.isLoading {
+                    ProgressView().tint(.appPrimary)
+                } else if store.notifications.isEmpty {
+                    emptyState
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(store.notifications) { notification in
+                                Button { handleTap(notification) } label: {
+                                    row(for: notification)
+                                }
+                                .buttonStyle(.plain)
+                                Divider().background(Color.appDivider)
                             }
-                            .buttonStyle(.plain)
-
-                            Divider().background(Color.appDivider)
                         }
+                        .padding(.bottom, 90)
                     }
                 }
             }
         }
-        .navigationTitle("Activity")
-        .navigationBarTitleDisplayMode(.inline)
+        .background(Color.appBackground.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             if let uid = session.user?.uid {
                 store.start(uid: uid)

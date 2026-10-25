@@ -131,6 +131,7 @@ struct MenuSheet: View {
                         do {
                             try await SocialService.deletePost(post)
                             dismiss()
+                            NotificationCenter.default.post(name: .ownPostDeleted, object: nil)
                         } catch { feedback = .deleteError(error.localizedDescription) }
                     }
                 }

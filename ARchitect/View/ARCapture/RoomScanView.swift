@@ -16,7 +16,6 @@ struct RoomScanView: View {
     @State private var captureView: RoomCaptureView?
     @State private var scanID = UUID()
     @State private var detectedWalls = 0
-    @State private var guidance = "Point at a well-lit wall and move slowly."
     @State private var scannedRoom: CapturedRoom?
     @State private var previewScene: SCNScene?
 
@@ -28,8 +27,7 @@ struct RoomScanView: View {
                     .ignoresSafeArea()
             } else if RoomCaptureSession.isSupported && cameraAllowed {
                 Scanner(session: session, view: $captureView,
-                        onProgress: { detectedWalls = $0 },
-                        onGuidance: { guidance = $0 }) { result in
+                        onProgress: { detectedWalls = $0 }) { result in
                     isProcessing = false
                     switch result {
                     case .success(let room):
@@ -44,59 +42,104 @@ struct RoomScanView: View {
                 .id(scanID)
                 .ignoresSafeArea()
             }
-            VStack(spacing: 16) {
-                HStack {
-                    Button("Cancel", action: onCancel)
+            VStack(spacing: 0) {
+                HStack(spacing: AppSpacing.md) {
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                            .background(Color.appSurfaceAlt, in: Circle())
+                    }
+                    .accessibilityLabel("Close room scan")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(scannedRoom == nil ? "STEP 1 OF 3" : "STEP 2 OF 3")
+                            .font(AppFont.inter(11, .semibold))
+                            .foregroundStyle(Color.appTextSecondary)
+                        Text(scannedRoom == nil ? "Scan your room" : "Preview your room")
+                            .font(AppFont.title3)
+                            .foregroundStyle(Color.appText)
+                    }
                     Spacer()
-                    Text("Scan your room").font(.headline)
-                    Spacer()
-                    if let scannedRoom {
-                        Button("Use room") { onScanned(scannedRoom) }
+                    if scannedRoom == nil && detectedWalls > 0 {
+                        Text("\(detectedWalls) wall\(detectedWalls == 1 ? "" : "s")")
+                            .font(AppFont.caption)
+                            .foregroundStyle(Color.appPrimary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.appSurfaceAlt, in: Capsule())
+                    }
+                }
+                .foregroundStyle(Color.appPrimary)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.vertical, 12)
+                .background(Color.appBackground.opacity(0.97))
+
+                Spacer()
+
+                VStack(alignment: .leading, spacing: AppSpacing.md) {
+                    if !RoomCaptureSession.isSupported {
+                        statusMessage("Room scanning needs LiDAR", detail: "Use a compatible iPhone Pro to create a room.", icon: "viewfinder")
+                    } else if cameraChecked && !cameraAllowed {
+                        statusMessage("Camera access needed", detail: "Allow camera access in Settings to scan your room.", icon: "camera")
+                        Button("Open Settings") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                        }.buttonStyle(PrimaryButtonStyle())
+                    } else if let scannedRoom {
+                        statusMessage("Your room is ready", detail: "Drag to look around. Pinch to zoom, then continue to add furniture.", icon: "checkmark.circle.fill")
+                        Button("Continue to furniture") { onScanned(scannedRoom) }
+                            .buttonStyle(PrimaryButtonStyle())
+                        Button("Scan again") { resetScan() }
+                            .buttonStyle(SecondaryButtonStyle())
+                    } else if isProcessing {
+                        HStack(spacing: AppSpacing.md) {
+                            ProgressView().tint(.appPrimary)
+                            Text("Building your room preview…")
+                                .font(AppFont.body)
+                                .foregroundStyle(Color.appText)
+                        }
+                    } else if let errorMessage {
+                        statusMessage("Couldn't build the room", detail: errorMessage, icon: "exclamationmark.triangle")
+                        Button("Scan again") { resetScan() }
+                            .buttonStyle(PrimaryButtonStyle())
                     } else {
-                        Button("Done") {
+                        statusMessage(detectedWalls == 0 ? "Find your first wall" : "Keep going around the room",
+                                      detail: "Move slowly and scan each wall, corner, and the floor.", icon: "viewfinder")
+                        Button {
                             isProcessing = true
                             captureView?.captureSession.stop(pauseARSession: false)
+                        } label: {
+                            Text("Preview scan")
                         }
-                        .disabled(captureView == nil || detectedWalls == 0 || isProcessing || errorMessage != nil)
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(captureView == nil || detectedWalls == 0)
+                        .opacity(detectedWalls == 0 ? 0.5 : 1)
                     }
                 }
-                .padding().background(.regularMaterial)
-                Spacer()
-                if !RoomCaptureSession.isSupported {
-                    ContentUnavailableView("Room scanning needs LiDAR", systemImage: "viewfinder", description: Text("Use a compatible iPhone Pro to create a room. You can still explore shared rooms on this device."))
-                } else if cameraChecked && !cameraAllowed {
-                    ContentUnavailableView("Camera access needed", systemImage: "camera", description: Text("Allow camera access in Settings to scan your room."))
-                    Button("Open Settings") {
-                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
-                    }
-                } else if scannedRoom != nil {
-                    VStack(spacing: 10) {
-                        Text("Your room is ready")
-                            .font(.headline)
-                        Text("Drag to inspect the scan. Pinch to zoom, then tap Use room to add furniture.")
-                            .multilineTextAlignment(.center)
-                        Button("Scan again") { resetScan() }
-                            .buttonStyle(.bordered)
-                    }
-                    .padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                } else if isProcessing {
-                    ProgressView("Building your room…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                } else if let errorMessage {
-                    Text(errorMessage).padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    Button("Scan again") { resetScan() }.buttonStyle(.borderedProminent)
-                } else {
-                    Text(detectedWalls == 0
-                         ? "\(guidance) No walls detected yet."
-                         : "\(detectedWalls) wall\(detectedWalls == 1 ? "" : "s") detected. \(guidance) Tap Done when the room is complete.")
-                        .multilineTextAlignment(.center).padding()
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .padding(AppSpacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    UnevenRoundedRectangle(topLeadingRadius: AppRadius.lg, topTrailingRadius: AppRadius.lg)
+                        .fill(Color.appBackground.opacity(0.97))
+                        .ignoresSafeArea(edges: .bottom)
                 }
-                Spacer().frame(height: 30)
-            }.padding(.horizontal)
+            }
         }
         .task { await refreshCameraAccess() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await refreshCameraAccess() } }
+        }
+    }
+
+    private func statusMessage(_ title: String, detail: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: AppSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(Color.appPrimary)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(AppFont.headline).foregroundStyle(Color.appText)
+                Text(detail).font(AppFont.callout).foregroundStyle(Color.appTextSecondary)
+            }
         }
     }
 
@@ -115,7 +158,6 @@ struct RoomScanView: View {
         previewScene = nil
         captureView = nil
         detectedWalls = 0
-        guidance = "Point at a well-lit wall and move slowly."
         scanID = UUID()
     }
 }
@@ -124,11 +166,10 @@ private struct Scanner: UIViewRepresentable {
     let session: ARSession
     @Binding var view: RoomCaptureView?
     let onProgress: (Int) -> Void
-    let onGuidance: (String) -> Void
     let completion: (Result<CapturedRoom, Error>) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onProgress: onProgress, onGuidance: onGuidance, completion: completion)
+        Coordinator(onProgress: onProgress, completion: completion)
     }
     func makeUIView(context: Context) -> RoomCaptureView {
         // RoomPlan requires a supplied ARSession to already be running with
@@ -139,7 +180,11 @@ private struct Scanner: UIViewRepresentable {
         let capture = RoomCaptureView(frame: .zero, arSession: session)
         capture.delegate = context.coordinator
         capture.captureSession.delegate = context.coordinator
-        capture.captureSession.run(configuration: .init())
+        var captureConfiguration = RoomCaptureSession.Configuration()
+        // RoomCaptureView's built-in coaching pill appears behind our scan
+        // header. The bottom panel supplies one clear instruction instead.
+        captureConfiguration.isCoachingEnabled = false
+        capture.captureSession.run(configuration: captureConfiguration)
         DispatchQueue.main.async { view = capture }
         return capture
     }
@@ -153,13 +198,11 @@ private struct Scanner: UIViewRepresentable {
     @objc(ARchitectRoomScanCoordinator)
     final class Coordinator: NSObject, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
         let onProgress: (Int) -> Void
-        let onGuidance: (String) -> Void
         let completion: (Result<CapturedRoom, Error>) -> Void
         private var delivered = false
-        init(onProgress: @escaping (Int) -> Void, onGuidance: @escaping (String) -> Void,
+        init(onProgress: @escaping (Int) -> Void,
              completion: @escaping (Result<CapturedRoom, Error>) -> Void) {
             self.onProgress = onProgress
-            self.onGuidance = onGuidance
             self.completion = completion
         }
         required init?(coder: NSCoder) { nil }
@@ -184,19 +227,6 @@ private struct Scanner: UIViewRepresentable {
         }
         func captureSession(_ session: RoomCaptureSession, didUpdate room: CapturedRoom) {
             DispatchQueue.main.async { self.onProgress(room.walls.count) }
-        }
-        func captureSession(_ session: RoomCaptureSession, didProvide instruction: RoomCaptureSession.Instruction) {
-            let message: String
-            switch instruction {
-            case .moveCloseToWall: message = "Move closer to a wall."
-            case .moveAwayFromWall: message = "Move farther from the wall."
-            case .slowDown: message = "Move your phone more slowly."
-            case .turnOnLight: message = "Turn on more lights."
-            case .lowTexture: message = "Aim at a corner or textured surface."
-            case .normal: message = "Keep scanning the walls and floor."
-            @unknown default: message = "Move slowly around the room."
-            }
-            DispatchQueue.main.async { self.onGuidance(message) }
         }
         func captureSession(_ session: RoomCaptureSession, didEndWith data: CapturedRoomData, error: Error?) {
             if let error { finish(.failure(error)) }

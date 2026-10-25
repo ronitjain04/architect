@@ -13,6 +13,10 @@
 
 import SwiftUI
 
+extension Notification.Name {
+    static let ownPostDeleted = Notification.Name("ARchitect.ownPostDeleted")
+}
+
 enum AppTab: Hashable {
     case feed
     case explore
@@ -27,6 +31,7 @@ struct RootTabView: View {
     @State private var feedPath = NavigationPath()
     @State private var explorePath = NavigationPath()
     @State private var profilePath = NavigationPath()
+    @State private var profileRefreshID = 0
 
     @State private var isShowingAR = false
 
@@ -46,7 +51,7 @@ struct RootTabView: View {
                 .tag(AppTab.explore)
 
                 NavigationStack(path: $profilePath) {
-                    ProfileView()
+                    ProfileView(refreshID: profileRefreshID)
                 }
                 .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.profile)
@@ -66,6 +71,13 @@ struct RootTabView: View {
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .fullScreenCover(isPresented: $isShowingAR) {
             ARCaptureView()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .ownPostDeleted)) { _ in
+            feedPath = NavigationPath()
+            explorePath = NavigationPath()
+            profilePath = NavigationPath()
+            profileRefreshID += 1
+            selectedTab = .profile
         }
     }
 
