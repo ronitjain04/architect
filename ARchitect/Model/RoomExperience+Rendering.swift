@@ -1,6 +1,7 @@
 import Foundation
 import RoomPlan
 import SceneKit
+import SwiftUI
 import simd
 
 extension PlacedFurniture {
@@ -57,6 +58,7 @@ extension RoomExperience {
         let url = directory.appendingPathComponent("room.usdz")
         try room.export(to: url, exportOptions: .parametric)
         let scene = try SCNScene(url: url, options: [.checkConsistency: true])
+        scene.background.contents = UIColor(Color.appSurface)
         for piece in furniture {
             guard let url = Bundle.main.url(forResource: piece.model.resourceName, withExtension: "usdz"),
                   let reference = SCNReferenceNode(url: url) else {

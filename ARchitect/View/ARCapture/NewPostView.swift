@@ -31,7 +31,6 @@ struct NewPostView: View {
             Color.appBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Top bar: cancel / title / share
                 HStack {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
@@ -42,24 +41,12 @@ struct NewPostView: View {
                     .disabled(isUploading)
                     Spacer()
 
-                    Text("New post")
-                        .font(AppFont.inter(15, .semibold))
+                    Text("Share your room")
+                        .font(AppFont.headline)
                         .foregroundColor(.appText)
 
                     Spacer()
-
-                    Button {
-                        share()
-                    } label: {
-                        if isUploading {
-                            ProgressView().tint(.appAccent)
-                        } else {
-                            Text("Share")
-                                .font(AppFont.inter(15, .semibold))
-                                .foregroundColor(.appAccent)
-                        }
-                    }
-                    .disabled(isUploading)
+                    Color.clear.frame(width: 17, height: 17)
                 }
                 .padding(.horizontal, AppSpacing.md)
                 .frame(height: 48)
@@ -71,21 +58,31 @@ struct NewPostView: View {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .frame(height: 300)
+                            .frame(height: 280)
                             .frame(maxWidth: .infinity)
                             .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
 
-                        AuthField(placeholder: "Title (e.g. Sunlit Living Room)", text: $title)
+                        Text("This is the preview people will see.")
+                            .font(AppFont.caption)
+                            .foregroundStyle(Color.appTextSecondary)
 
-                        TextField("Write a caption…", text: $caption, axis: .vertical)
-                            .lineLimit(3...6)
-                            .font(AppFont.body)
-                            .foregroundColor(.appText)
-                            .padding(AppSpacing.md)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                                    .fill(Color.appSurfaceAlt)
-                            )
+                        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                            Text("Room title").font(AppFont.headline).foregroundStyle(Color.appText)
+                            AuthField(placeholder: "e.g. Sunlit living room", text: $title)
+                        }
+
+                        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                            Text("Caption (optional)").font(AppFont.headline).foregroundStyle(Color.appText)
+                            TextField("What inspired this space?", text: $caption, axis: .vertical)
+                                .lineLimit(3...6)
+                                .font(AppFont.body)
+                                .foregroundColor(.appText)
+                                .padding(AppSpacing.md)
+                                .background(
+                                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                                        .fill(Color.appSurfaceAlt)
+                                )
+                        }
 
                         if !usedFurniture.isEmpty {
                             VStack(alignment: .leading, spacing: AppSpacing.xs) {
@@ -108,8 +105,9 @@ struct NewPostView: View {
                         }
 
                         if experience != nil {
-                            Text("Sharing includes your scanned room and furniture. All signed-in beta testers can view it.")
-                                .font(.footnote).foregroundStyle(.secondary)
+                            Label("Your room scan and furniture will be visible to signed-in beta testers.", systemImage: "person.2")
+                                .font(AppFont.caption)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                         if let errorMessage {
                             Text(errorMessage)
@@ -120,6 +118,17 @@ struct NewPostView: View {
                     .padding(AppSpacing.md)
                 }
                 .scrollDismissesKeyboard(.interactively)
+
+                Button(action: share) {
+                    HStack {
+                        if isUploading { ProgressView().tint(.appOnPrimary) }
+                        Text(isUploading ? "Sharing your room…" : "Share room")
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(isUploading)
+                .padding(AppSpacing.md)
+                .background(Color.appBackground)
             }
         }
         .interactiveDismissDisabled(isUploading)

@@ -16,18 +16,28 @@ struct RoomExperienceView: View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
             if let scene {
-                VStack(spacing: 12) {
+                VStack(spacing: 0) {
                     SceneView(scene: scene, options: [.allowsCameraControl, .autoenablesDefaultLighting])
-                    if !furniture.isEmpty {
-                        Text(furniture.map { $0.model.title }.joined(separator: " · "))
-                            .font(.caption).lineLimit(2).padding(.horizontal)
+                    VStack(alignment: .leading, spacing: AppSpacing.md) {
+                        Text("Explore the room")
+                            .font(AppFont.title3)
+                            .foregroundStyle(Color.appText)
+                        Text("Drag to turn the room · Pinch to zoom")
+                            .font(AppFont.callout)
+                            .foregroundStyle(Color.appTextSecondary)
+                        if !furniture.isEmpty {
+                            Text(furniture.map { $0.model.title }.joined(separator: " · "))
+                                .font(AppFont.caption)
+                                .foregroundStyle(Color.appTextSecondary)
+                                .lineLimit(2)
+                        }
+                        Button("View in your space", systemImage: "arkit") { showAR = true }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .disabled(!ARWorldTrackingConfiguration.isSupported)
                     }
-                    Text("Drag to orbit · Pinch to zoom")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Button("Place room in AR", systemImage: "arkit") { showAR = true }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .disabled(!ARWorldTrackingConfiguration.isSupported)
-                        .padding()
+                    .padding(AppSpacing.lg)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.appBackground)
                 }
             } else if let errorMessage {
                 ContentUnavailableView("Unable to open this room", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
@@ -71,6 +81,7 @@ private struct RoomARPreview: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            Color.appBackground.ignoresSafeArea()
             if cameraAllowed {
                 RoomARContainer(source: scene, fullSize: fullSize).ignoresSafeArea()
             } else if checkedCamera {
@@ -78,15 +89,38 @@ private struct RoomARPreview: View {
             } else { ProgressView() }
             VStack {
                 HStack {
-                    Button("Close") { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                            .background(Color.appSurfaceAlt, in: Circle())
+                    }
+                    .accessibilityLabel("Close AR preview")
                     Spacer()
-                    Toggle("Full size", isOn: $fullSize).fixedSize()
-                }.padding().background(.regularMaterial)
+                    Text("View in your space")
+                        .font(AppFont.headline)
+                    Spacer()
+                    Color.clear.frame(width: 44, height: 44)
+                }
+                .foregroundStyle(Color.appText)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.vertical, 12)
+                .background(Color.appBackground.opacity(0.97))
                 Spacer()
-                Text("Tap a detected floor to place the room. \(fullSize ? "Life-size" : "Tabletop (1:10)") reconstruction.")
-                    .multilineTextAlignment(.center).padding()
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .padding()
+                VStack(spacing: AppSpacing.md) {
+                    Text("Tap a detected floor to place the room.")
+                        .font(AppFont.callout)
+                        .foregroundStyle(Color.appText)
+                        .multilineTextAlignment(.center)
+                    Picker("Room size", selection: $fullSize) {
+                        Text("Tabletop").tag(false)
+                        Text("Full size").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .padding(AppSpacing.lg)
+                .background(Color.appBackground.opacity(0.97), in: RoundedRectangle(cornerRadius: AppRadius.lg))
+                .padding(AppSpacing.md)
             }
         }
         .task {
