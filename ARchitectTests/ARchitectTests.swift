@@ -70,4 +70,31 @@ struct ARchitectTests {
         #expect(target > 0.7)
         #expect(target < 0.9)
     }
+
+    @Test func pinchResizesRelativeToTheCurrentFurnitureSize() {
+        let original = SIMD3<Float>(1, 2, 1)
+        let enlarged = FurnitureScaleMath.resizedScale(
+            originalScale: original, scaleAtStart: original, gestureScale: 1.5)
+        #expect(enlarged == SIMD3<Float>(1.5, 3, 1.5))
+
+        let enlargedAgain = FurnitureScaleMath.resizedScale(
+            originalScale: original, scaleAtStart: enlarged, gestureScale: 1.5)
+        #expect(enlargedAgain == SIMD3<Float>(2.25, 4.5, 2.25))
+        let reduced = FurnitureScaleMath.resizedScale(
+            originalScale: original, scaleAtStart: enlargedAgain, gestureScale: 0.5)
+        #expect(reduced == SIMD3<Float>(1.125, 2.25, 1.125))
+    }
+
+    @Test func pinchKeepsFurnitureWithinUsableSizeLimits() {
+        let original = SIMD3<Float>(1, 1, 1)
+        #expect(FurnitureScaleMath.resizedScale(
+            originalScale: original, scaleAtStart: original, gestureScale: 0.01)
+            == SIMD3<Float>(repeating: 0.5))
+        #expect(FurnitureScaleMath.resizedScale(
+            originalScale: original, scaleAtStart: original, gestureScale: 100)
+            == SIMD3<Float>(repeating: 2.5))
+        #expect(FurnitureScaleMath.resizedScale(
+            originalScale: original, scaleAtStart: original, gestureScale: .nan)
+            == original)
+    }
 }

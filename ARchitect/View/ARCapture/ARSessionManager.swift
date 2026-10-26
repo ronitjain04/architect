@@ -49,6 +49,16 @@ enum FurnitureDragMath {
     }
 }
 
+enum FurnitureScaleMath {
+    static func resizedScale(originalScale: SIMD3<Float>, scaleAtStart: SIMD3<Float>,
+                             gestureScale: Float) -> SIMD3<Float> {
+        guard originalScale.x > 0, scaleAtStart.x > 0,
+              gestureScale.isFinite, gestureScale > 0 else { return scaleAtStart }
+        let factor = min(max(scaleAtStart.x / originalScale.x * gestureScale, 0.5), 2.5)
+        return originalScale * SIMD3<Float>(repeating: factor)
+    }
+}
+
 final class ARSessionManager: NSObject, ObservableObject {
     let arView = ARView(frame: .zero)
     var capturedRoom: CapturedRoom?
@@ -73,6 +83,12 @@ final class ARSessionManager: NSObject, ObservableObject {
         let metersPerPoint: Float
     }
     private var panContext: PanContext?
+    private struct PinchContext {
+        let wrapper: FurnitureWrapper
+        let scaleAtStart: SIMD3<Float>
+        let bottomAtStart: Float
+    }
+    private var pinchContext: PinchContext?
 
     // MARK: - Session lifecycle
 
@@ -99,7 +115,11 @@ final class ARSessionManager: NSObject, ObservableObject {
         arView.addGestureRecognizer(tapGesture)
 
         let panGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePanGesture(_:)))
+        panGesture.maximumNumberOfTouches = 1
         arView.addGestureRecognizer(panGesture)
+
+        let pinchGesture = UIPinchGestureRecognizer(target: self, action: #selector(handlePinchGesture(_:)))
+        arView.addGestureRecognizer(pinchGesture)
     }
 
     // MARK: - Placement
@@ -202,7 +222,7 @@ final class ARSessionManager: NSObject, ObservableObject {
 
     // MARK: - Selection & movement
 
-    /// Double-tap locks/unlocks a piece (locking removes rotate/scale gestures).
+    /// Double-tap locks/unlocks a piece (locking removes rotation and blocks drag/resize).
     @objc private func handleTapGesture(_ sender: UITapGestureRecognizer) {
         let tapLocation = sender.location(in: arView)
         guard let tappedEntity = arView.entity(at: tapLocation),
@@ -269,6 +289,44 @@ final class ARSessionManager: NSObject, ObservableObject {
         }
     }
 
+    /// Resize the selected piece relative to its size when this pinch began.
+    /// Compensating its lowest point keeps the piece on the same floor plane.
+    @objc private func handlePinchGesture(_ sender: UIPinchGestureRecognizer) {
+        switch sender.state {
+        case .began:
+            let location = sender.location(in: arView)
+            let hit = arView.entity(at: location)
+            let wrapper = furnitureWrappers.first { candidate in
+                var entity = hit
+                while let current = entity {
+                    if current === candidate.entity { return true }
+                    entity = current.parent
+                }
+                return false
+            } ?? furnitureWrappers.first(where: { $0.isSelected })
+            guard let wrapper, !wrapper.isLocked else { return }
+            furnitureWrappers.forEach { $0.isSelected = ($0 === wrapper) }
+            refreshSelectionState()
+            pinchContext = PinchContext(
+                wrapper: wrapper,
+                scaleAtStart: wrapper.entity.scale,
+                bottomAtStart: wrapper.entity.visualBounds(relativeTo: wrapper.entity.parent).min.y)
+        case .changed:
+            guard let context = pinchContext, !context.wrapper.isLocked else { return }
+            let entity = context.wrapper.entity
+            entity.scale = FurnitureScaleMath.resizedScale(
+                originalScale: context.wrapper.originalScale,
+                scaleAtStart: context.scaleAtStart,
+                gestureScale: Float(sender.scale))
+            let bottom = entity.visualBounds(relativeTo: entity.parent).min.y
+            entity.position.y += context.bottomAtStart - bottom
+        case .ended, .cancelled, .failed:
+            pinchContext = nil
+        default:
+            break
+        }
+    }
+
     func toggleMovementMode() {
         guard let selectedWrapper = furnitureWrappers.first(where: { $0.isSelected }) else { return }
         selectedWrapper.movementMode = (selectedWrapper.movementMode == .horizontal) ? .vertical : .horizontal
@@ -303,7 +361,9 @@ final class ARSessionManager: NSObject, ObservableObject {
             + SIMD3(position.x - anchorWorld.x,
                     position.y - anchorWorld.y,
                     position.z - anchorWorld.z)
-        wrapper.entity.scale = wrapper.originalScale
+        let floorHeightInAnchor = position.y - anchorWorld.y
+        let bottomInAnchor = wrapper.entity.visualBounds(relativeTo: anchor).min.y
+        wrapper.entity.position.y += floorHeightInAnchor - bottomInAnchor
     }
 
     func experience() throws -> RoomExperience {

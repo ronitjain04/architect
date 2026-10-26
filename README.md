@@ -1,6 +1,6 @@
 # ARchitect
 
-ARchitect is an iPhone app for turning a room scan into a shareable 3D space. Scan a room, arrange furniture at its intended size, capture a preview, and share the room so others can explore it or place it in their own space.
+ARchitect is an iPhone app for turning a room scan into a shareable 3D space. Scan a room, arrange and resize furniture, capture a preview, and share the room so others can explore it or place it in their own space.
 
 Built with SwiftUI, RoomPlan, ARKit, SceneKit, Firebase Authentication, and Cloud Firestore.
 
@@ -26,7 +26,7 @@ The demo should show the full flow: scan a room, preview the reconstruction, pla
 - The Debug configuration omits the Apple entitlement and hides its sign-in button so a free personal team can test RoomPlan on a connected iPhone. Release retains Sign in with Apple for TestFlight; selecting a paid team is still required to archive and distribute it.
 - If a personally signed Debug build installs but iOS refuses its first launch, trust the developer app on the phone under Settings → General → VPN & Device Management. Keep Developer Mode enabled and the phone unlocked while testing.
 - Build and run on the phone. Sign in, grant camera access, scan a room, place furniture, publish, and open the post on a second account/device. Try the shared `architect://room/<post-id>` link on a signed-in install, rotate the 3D view, and place the reconstructed room in AR.
-- During scanning, the screen shows a live wall count and scanning guidance. Test in a well-lit room, moving slowly while aiming at wall/floor corners. After Done, inspect the 3D scan and tap Use room. Drag furniture along the floor with one finger; switch to vertical movement with the arrow control when needed. Use the scope button to recenter the selected item. Furniture stays at its catalog size so an accidental pinch cannot shrink it away.
+- During scanning, the screen shows a live wall count and scanning guidance. Test in a well-lit room, moving slowly while aiming at wall/floor corners. After Done, inspect the 3D scan and tap Use room. Drag furniture along the floor with one finger, pinch to resize it from half to two-and-a-half times its catalog size, or twist with two fingers to rotate it. Switch to vertical movement with the arrow control when needed. Use the scope button to recenter the selected item without changing its size.
 - Archive the Release configuration in Xcode and upload through Organizer to App Store Connect → TestFlight. External testers require Apple's first-build beta review and TestFlight test information. The archive needs a valid team signing profile; an unsigned simulator build cannot be uploaded.
 
 The scan is a RoomPlan reconstruction of walls, openings, and recognized furniture categories, plus the app's bundled furniture transforms. It is not a photorealistic scan or an exported camera mesh.
