@@ -101,7 +101,7 @@ struct ARCaptureView: View {
                 VStack(spacing: AppSpacing.md) {
                     Text(manager.usedFurnitureModels.isEmpty
                          ? "Add furniture to your scanned room."
-                         : "Drag furniture to move it. Tap an item for more options.")
+                         : "Drag to move · pinch to resize · twist to rotate")
                         .font(AppFont.callout)
                         .foregroundStyle(Color.appText)
                         .multilineTextAlignment(.center)
