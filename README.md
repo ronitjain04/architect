@@ -1,6 +1,6 @@
 # ARchitect
 
-An iPhone app for scanning a room, arranging bundled furniture in AR, and sharing a measured 3D reconstruction with other signed-in users. Built with SwiftUI, RoomPlan, ARKit, SceneKit, Firebase Authentication, and Cloud Firestore.
+An iPhone app for scanning a room, arranging bundled furniture in AR, and sharing a measured 3D reconstruction with other signed-in users. Built with SwiftUI, RoomPlan, ARKit, SceneKit, Firebase Authentication, and Cloud Firestore. Initially built with GT iOS Club and continued as a solo project.
 
 ## Beta setup
 
